@@ -1,0 +1,38 @@
+[
+  {
+    "id": "d1",
+    "kind": "wyr",
+    "front": "Spend a rainy weekend in a cabin with no wifi, or in a luxury hotel with terrible food?",
+    "back": "Talk it through — what matters more, place or plate?"
+  },
+  {
+    "id": "d2",
+    "kind": "deep",
+    "front": "What's something you've never told anyone about how you experience love?",
+    "back": "No wrong answers. Take your time."
+  },
+  {
+    "id": "d3",
+    "kind": "icebreaker",
+    "front": "If we could teleport anywhere for 3 hours right now, where would we go and why?",
+    "back": "Pick one place. Bonus: name the snack."
+  },
+  {
+    "id": "d4",
+    "kind": "wyr",
+    "front": "Always know when your partner is lying, or never be able to lie to them?",
+    "back": "Honesty experiment — discuss."
+  },
+  {
+    "id": "d5",
+    "kind": "deep",
+    "front": "What does 'feeling safe' with someone look like for you?",
+    "back": "Share one small example."
+  },
+  {
+    "id": "d6",
+    "kind": "icebreaker",
+    "front": "What song should be the unofficial anthem of our relationship?",
+    "back": "Queue it on YouTube after."
+  }
+]

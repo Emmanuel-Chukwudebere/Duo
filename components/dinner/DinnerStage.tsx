@@ -1,0 +1,174 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import type { DinnerCard, DuoAppMessage } from "@/lib/types";
+import dinnerPack from "@/packs/dinner.json";
+import { toast } from "@/components/shell/Toast";
+import { YouTubePlayer } from "@/components/youtube/YouTubePlayer";
+import { YouTubeSearch } from "@/components/youtube/YouTubeSearch";
+
+export function DinnerStage({
+  sendApp,
+  onAppMessage,
+  isYtController,
+  ytVideoId,
+  ytTitle,
+  duckLevel,
+  onLoadYoutube,
+  remoteYtCommand,
+  onYtEvent,
+}: {
+  sendApp: (msg: DuoAppMessage) => void;
+  onAppMessage: (fn: (msg: DuoAppMessage) => void) => () => void;
+  isYtController: boolean;
+  ytVideoId: string | null;
+  ytTitle: string;
+  duckLevel: number;
+  onLoadYoutube: (id: string, title?: string) => void;
+  remoteYtCommand: {
+    id: number;
+    kind: "play" | "pause" | "seek" | "load";
+    seconds?: number;
+    videoId?: string;
+  } | null;
+  onYtEvent: (msg: DuoAppMessage) => void;
+}) {
+  const [cards, setCards] = useState<DinnerCard[]>(() =>
+    (dinnerPack as DinnerCard[]).slice(0, 3),
+  );
+  const [flipped, setFlipped] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    return onAppMessage((msg) => {
+      if (msg.type === "dinner.flip") {
+        setFlipped((f) => ({ ...f, [msg.cardId]: msg.flipped }));
+      }
+      if (msg.type === "dinner.deal") {
+        setCards(msg.cards);
+        setFlipped({});
+      }
+    });
+  }, [onAppMessage]);
+
+  const flip = (id: string) => {
+    const next = !flipped[id];
+    setFlipped((f) => ({ ...f, [id]: next }));
+    sendApp({ type: "dinner.flip", cardId: id, flipped: next });
+  };
+
+  const refresh = useCallback(async () => {
+    try {
+      const res = await fetch("/api/ai/dinner", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tone: "cozy" }),
+      });
+      const data = await res.json();
+      if (data.cards) {
+        setCards(data.cards);
+        setFlipped({});
+        sendApp({ type: "dinner.deal", cards: data.cards });
+        toast(
+          data.source === "mistral"
+            ? "Fresh prompts from AI"
+            : "Shuffled prompt pack",
+        );
+      }
+    } catch {
+      toast("Could not refresh prompts");
+    }
+  }, [sendApp]);
+
+  const kindLabel = (k: DinnerCard["kind"]) =>
+    k === "wyr" ? "WOULD YOU RATHER" : k === "deep" ? "DEEP QUESTION" : "ICEBREAKER";
+
+  return (
+    <div className="absolute inset-0 p-6 md:p-8 flex flex-col gap-4 overflow-auto">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <div className="text-xs tracking-wider text-[#FF5A79] font-medium uppercase">
+            Tonight&apos;s vibe
+          </div>
+          <h2 className="text-2xl font-semibold tracking-tight">
+            Dinner &amp; Deep Talk
+          </h2>
+        </div>
+        <button
+          type="button"
+          onClick={refresh}
+          className="px-4 py-2 text-sm rounded-2xl glass hover:bg-white/10"
+        >
+          Fresh prompts
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 flex-1 content-center">
+        {cards.map((card) => (
+          <button
+            key={card.id}
+            type="button"
+            onClick={() => flip(card.id)}
+            className="relative h-[200px] w-full [perspective:1000px]"
+          >
+            <div
+              className={`prompt-card relative h-full w-full ${
+                flipped[card.id] ? "flipped" : ""
+              }`}
+            >
+              <div className="prompt-card-face absolute inset-0 glass rounded-3xl p-5 flex flex-col justify-between border border-white/10">
+                <div>
+                  <div className="text-[10px] tracking-[1px] text-[#FF5A79] font-medium">
+                    {kindLabel(card.kind)}
+                  </div>
+                  <div className="mt-3 text-[15px] leading-snug font-medium text-left">
+                    {card.front}
+                  </div>
+                </div>
+                <div className="text-[10px] text-[#9CA3AF] text-right">
+                  Tap to flip
+                </div>
+              </div>
+              <div className="prompt-card-face prompt-card-back absolute inset-0 glass rounded-3xl p-5 flex flex-col justify-center border border-white/10 bg-[#12141D]">
+                <div className="text-center text-sm text-[#9CA3AF]">
+                  {card.back}
+                </div>
+              </div>
+            </div>
+          </button>
+        ))}
+      </div>
+
+      <div className="glass rounded-3xl p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="text-xs uppercase tracking-wider text-[#9CA3AF]">
+            Soundtrack · YouTube
+          </div>
+          {ytTitle ? (
+            <div className="text-xs text-[#F3F4F6] truncate max-w-[50%]">
+              {ytTitle}
+            </div>
+          ) : null}
+        </div>
+        {isYtController ? (
+          <YouTubeSearch onPick={onLoadYoutube} />
+        ) : (
+          <p className="text-xs text-[#9CA3AF]">
+            Partner controls the soundtrack — ask them to load a track.
+          </p>
+        )}
+        <YouTubePlayer
+          videoId={ytVideoId}
+          isController={isYtController}
+          duckLevel={duckLevel}
+          compact
+          remoteCommand={remoteYtCommand}
+          onPlay={() => onYtEvent({ type: "yt.play" })}
+          onPause={() => onYtEvent({ type: "yt.pause" })}
+          onTime={(seconds, playing) =>
+            onYtEvent({ type: "yt.time", seconds, playing })
+          }
+        />
+      </div>
+    </div>
+  );
+}

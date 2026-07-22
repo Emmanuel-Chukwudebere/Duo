@@ -1,0 +1,42 @@
+{
+  "wyr": [
+    {
+      "a": "Cook a five-course meal together",
+      "b": "Order takeout and build a pillow fort"
+    },
+    {
+      "a": "Travel the world with one backpack",
+      "b": "Build a cozy forever home and never move"
+    },
+    {
+      "a": "Always share a dessert",
+      "b": "Always get your own (no tasting)"
+    },
+    {
+      "a": "Morning person forever",
+      "b": "Night owl forever"
+    }
+  ],
+  "wordAssociationSeeds": [
+    "midnight",
+    "ocean",
+    "spark",
+    "coffee",
+    "velvet",
+    "home",
+    "rain",
+    "starlight"
+  ],
+  "categories": [
+    "foods",
+    "movies",
+    "date ideas",
+    "animals",
+    "songs",
+    "feelings",
+    "cities",
+    "hobbies"
+  ],
+  "letters": "ABCDEFGHJKLMNPRSTW",
+  "placesHint": "cities, countries, landmarks"
+}
