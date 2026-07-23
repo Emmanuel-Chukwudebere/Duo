@@ -161,6 +161,15 @@ export function useDuoRoom(roomCode: string) {
     });
   }, []);
 
+  // Show "Connecting media…" only while NOT already connected. Renegotiations
+  // (e.g. screen share start/stop, late offers) fire offer/answer exchanges after
+  // the call is up — without this guard the status text flips back to "Connecting…"
+  // forever even though the peer connection is healthy, making it look broken.
+  const setConnectingStatus = useCallback(() => {
+    if (pcRef.current?.connectionState === "connected") return;
+    update({ status: "Connecting media…" });
+  }, [update]);
+
   const broadcastSignal = useCallback((payload: SignalMsg) => {
     const ch = channelRef.current;
     if (!ch) return;
@@ -487,14 +496,14 @@ export function useDuoRoom(roomCode: string) {
         to,
         sdp: pc.localDescription ?? offer,
       });
-      update({ status: "Connecting media…" });
+      setConnectingStatus();
     } catch (e) {
       console.error("createOffer failed", e);
       update({ status: "Could not start call — retrying…" });
     } finally {
       makingOffer.current = false;
     }
-  }, [broadcastSignal, ensurePc, setupDataChannel, update]);
+  }, [broadcastSignal, ensurePc, setConnectingStatus, setupDataChannel, update]);
 
   const startLocalMedia = useCallback(async () => {
     try {
@@ -598,13 +607,13 @@ export function useDuoRoom(roomCode: string) {
             to: msg.from,
             sdp: pc.localDescription ?? answer,
           });
-          update({ status: "Connecting media…" });
+          setConnectingStatus();
         } else if (msg.type === "answer" && msg.sdp) {
           if (pc.signalingState === "have-local-offer") {
             await pc.setRemoteDescription(msg.sdp);
             remoteDescSetRef.current = true;
             await flushIce(pc);
-            update({ status: "Connecting media…" });
+            setConnectingStatus();
           }
         } else if (msg.type === "ice") {
           if (msg.candidate) {
@@ -624,7 +633,14 @@ export function useDuoRoom(roomCode: string) {
         update({ status: "Signaling error — retrying connection…" });
       }
     },
-    [broadcastSignal, createAndSendOffer, ensurePc, flushIce, update],
+    [
+      broadcastSignal,
+      createAndSendOffer,
+      ensurePc,
+      flushIce,
+      setConnectingStatus,
+      update,
+    ],
   );
 
   useEffect(() => {

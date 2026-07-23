@@ -31,6 +31,7 @@ import { CinemaStage } from "@/components/cinema/CinemaStage";
 import { ToastHost, toast } from "@/components/shell/Toast";
 import { TwoToneIcon } from "@/components/ui/TwoToneIcon";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { DuoLogo } from "@/components/ui/DuoLogo";
 import { DraggableBubble } from "@/components/shell/DraggableBubble";
 
 const MODES: {
@@ -178,12 +179,7 @@ export function RoomShell({ code }: { code: string }) {
         <div className="mx-auto max-w-[1280px] px-3 sm:px-6 md:px-8 py-2 space-y-2">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
-              <div className="w-8 h-8 rounded-xl bg-[#FF5A79]/12 border border-[#FF5A79]/25 flex items-center justify-center shrink-0">
-                <TwoToneIcon icon={Heart} tone="rose" size={16} />
-              </div>
-              <span className="font-semibold tracking-tight text-sm sm:text-base">
-                Duo
-              </span>
+              <DuoLogo height={22} className="shrink-0" priority />
               <div className="hidden xs:flex sm:flex px-2 py-0.5 bg-[#12141D] rounded-full items-center gap-1.5 text-[10px] sm:text-xs border border-white/8 ml-1">
                 <span
                   className={`w-1.5 h-1.5 rounded-full shrink-0 ${
