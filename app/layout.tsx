@@ -44,11 +44,8 @@ export const metadata: Metadata = {
       "Private date rooms for couples. Video, YouTube watch parties, games & conversation starters — right in your browser ✨",
     images: ["/og-image.png"],
   },
-  icons: {
-    icon: "/icon.png",
-    shortcut: "/icon.png",
-    apple: "/icon.png",
-  },
+  // Icons are provided by the app/icon.png + app/apple-icon.png file conventions
+  // (both generated from the Duo logo), so no manual overrides are needed here.
 };
 
 export const viewport: Viewport = {
