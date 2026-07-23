@@ -38,5 +38,22 @@
     "hobbies"
   ],
   "letters": "ABCDEFGHJKLMNPRSTW",
-  "placesHint": "cities, countries, landmarks"
+  "placesHint": "cities, countries, landmarks",
+  "mostLikely": [
+    "spend $100 on an impulse buy online at 2 AM",
+    "cry during an animated movie",
+    "forget where they parked the car",
+    "win a random karaoke competition",
+    "get lost even with GPS turned on",
+    "adopt 3 stray cats on vacation",
+    "fall asleep 10 minutes into movie night",
+    "accidentally burn dinner while talking"
+  ],
+  "couplesQuiz": [
+    "What's my ultimate late-night comfort food?",
+    "If I could travel anywhere tomorrow, where would I go?",
+    "What's my favorite memory of us together?",
+    "What's my biggest guilty pleasure movie or show?",
+    "What habit of mine makes you smile the most?"
+  ]
 }

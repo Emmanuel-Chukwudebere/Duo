@@ -26,6 +26,8 @@ const GAME_IDS = Object.keys(GAME_META) as GameId[];
 
 const GAME_ICONS: Record<GameId, typeof Heart> = {
   wyr: MessageCircleQuestion,
+  "most-likely": Sparkles,
+  "couples-quiz": Heart,
   "word-association": WholeWord,
   "starts-with": TextCursorInput,
   "start-end": TextCursorInput,
@@ -572,6 +574,26 @@ export function GamesStage({
             >
               {/* Prompt card (fixed, not swiped away) */}
               <div className="w-full max-w-[400px] rounded-3xl border border-white/10 bg-[#181B26] p-6 sm:p-7">
+                {active === "most-likely" ? (
+                  <>
+                    <p className="text-[10px] uppercase tracking-[0.14em] text-[#EC4899] font-medium mb-2">
+                      Who is most likely to…
+                    </p>
+                    <p className="text-xl sm:text-2xl font-semibold tracking-tight leading-snug">
+                      {String(payload.prompt)}
+                    </p>
+                  </>
+                ) : null}
+                {active === "couples-quiz" ? (
+                  <>
+                    <p className="text-[10px] uppercase tracking-[0.14em] text-[#F59E0B] font-medium mb-2">
+                      Couples Quiz
+                    </p>
+                    <p className="text-xl sm:text-2xl font-semibold tracking-tight leading-snug">
+                      {String(payload.question)}
+                    </p>
+                  </>
+                ) : null}
                 {active === "word-association" ? (
                   <>
                     <p className="text-[10px] uppercase tracking-[0.14em] text-[#9CA3AF] mb-2">

@@ -14,9 +14,41 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Duo — Midnight Lounge",
+  title: "Duo — Midnight Lounge for Couples",
   description:
-    "Ephemeral long-distance date rooms: video, YouTube co-watch, games, and smart audio ducking.",
+    "Ephemeral long-distance date rooms: WebRTC video, YouTube co-watch, dinner prompts, mini-games, and voice audio ducking.",
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_APP_URL || "https://justduo.vercel.app",
+  ),
+  openGraph: {
+    title: "Duo — Midnight Lounge for Couples",
+    description:
+      "Ephemeral long-distance date rooms with WebRTC video, YouTube co-watch, games, and voice audio ducking.",
+    url: "https://justduo.vercel.app",
+    siteName: "Duo",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "Duo — Midnight Lounge for Long-Distance Couples",
+      },
+    ],
+    locale: "en_US",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Duo — Midnight Lounge for Couples",
+    description:
+      "Ephemeral long-distance date rooms with WebRTC video, YouTube co-watch, games, and voice audio ducking.",
+    images: ["/og-image.png"],
+  },
+  icons: {
+    icon: "/icon.png",
+    shortcut: "/icon.png",
+    apple: "/icon.png",
+  },
 };
 
 export const viewport: Viewport = {

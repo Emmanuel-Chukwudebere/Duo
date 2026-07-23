@@ -64,6 +64,8 @@ export interface DuoRoomState {
   duckLevel: number;
   localSpeaking: boolean;
   remoteSpeaking: boolean;
+  partnerMicOn: boolean;
+  partnerCamOn: boolean;
   lastReaction: { emoji: string; id: number } | null;
   status: string;
 }
@@ -94,6 +96,8 @@ export function useDuoRoom(roomCode: string) {
       duckLevel: 1,
       localSpeaking: false,
       remoteSpeaking: false,
+      partnerMicOn: true,
+      partnerCamOn: true,
       lastReaction: null,
       status: "Connecting…",
     };
@@ -235,6 +239,8 @@ export function useDuoRoom(roomCode: string) {
             cinemaSource: stateRef.current.cinemaSource,
             ytVideoId: stateRef.current.ytVideoId,
             ytTitle: stateRef.current.ytTitle,
+            partnerMicOn: stateRef.current.micOn,
+            partnerCamOn: stateRef.current.camOn,
           });
         }
         if (msg.type === "room.sync_state") {
@@ -243,6 +249,14 @@ export function useDuoRoom(roomCode: string) {
             cinemaSource: msg.cinemaSource,
             ytVideoId: msg.ytVideoId,
             ytTitle: msg.ytTitle,
+            ...(msg.partnerMicOn !== undefined ? { partnerMicOn: msg.partnerMicOn } : {}),
+            ...(msg.partnerCamOn !== undefined ? { partnerCamOn: msg.partnerCamOn } : {}),
+          });
+        }
+        if (msg.type === "media.state") {
+          update({
+            partnerMicOn: msg.micOn,
+            partnerCamOn: msg.camOn,
           });
         }
         if (msg.type === "mode.switch") update({ mode: msg.mode });
@@ -817,7 +831,12 @@ export function useDuoRoom(roomCode: string) {
     if (!track) return;
     track.enabled = !track.enabled;
     update({ micOn: track.enabled });
-  }, [update]);
+    sendApp({
+      type: "media.state",
+      micOn: track.enabled,
+      camOn: stateRef.current.camOn,
+    });
+  }, [sendApp, update]);
 
   const toggleCam = useCallback(() => {
     const stream = localStreamRef.current;
@@ -826,7 +845,12 @@ export function useDuoRoom(roomCode: string) {
     if (!track) return;
     track.enabled = !track.enabled;
     update({ camOn: track.enabled });
-  }, [update]);
+    sendApp({
+      type: "media.state",
+      micOn: stateRef.current.micOn,
+      camOn: track.enabled,
+    });
+  }, [sendApp, update]);
 
   const bindLocalScreenPreview = useCallback(() => {
     const el = screenVideoRef.current;
@@ -998,6 +1022,29 @@ export function useDuoRoom(roomCode: string) {
     [sendApp, update],
   );
 
+  const resync = useCallback(() => {
+    if (partnerIdRef.current) {
+      update({ status: "Re-syncing with partner…" });
+      try {
+        pcRef.current?.restartIce();
+      } catch {
+        /* ignore */
+      }
+      if (isInitiatorRef.current) {
+        void createAndSendOffer();
+      } else {
+        broadcastSignal({
+          type: "ready",
+          from: peerIdRef.current,
+          to: partnerIdRef.current,
+        });
+      }
+      sendApp({ type: "room.sync_request" });
+    } else {
+      update({ status: "Waiting for partner…" });
+    }
+  }, [broadcastSignal, createAndSendOffer, sendApp, update]);
+
   const isYtController = state.ytControllerId === state.peerId;
 
   return {
@@ -1019,6 +1066,7 @@ export function useDuoRoom(roomCode: string) {
     setDuckingMode,
     triggerTalk,
     sendReaction,
+    resync,
     isYtController,
     duckLevel: state.duckLevel,
     bindLocalScreenPreview,

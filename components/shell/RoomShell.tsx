@@ -16,9 +16,12 @@ import {
   MicOff,
   MonitorUp,
   PartyPopper,
+  QrCode,
+  RotateCcw,
   UtensilsCrossed,
   Volume2,
   VolumeX,
+  X,
 } from "lucide-react";
 import { useDuoRoom } from "@/hooks/useDuoRoom";
 import type { DuoAppMessage, StageMode } from "@/lib/types";
@@ -64,6 +67,7 @@ export function RoomShell({ code }: { code: string }) {
     videoId?: string;
   } | null>(null);
   const [bubblesCollapsed, setBubblesCollapsed] = useState(false);
+  const [showQrModal, setShowQrModal] = useState(false);
   const stageConstraintsRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -198,6 +202,17 @@ export function RoomShell({ code }: { code: string }) {
               <span className="sm:hidden px-2 py-0.5 font-mono text-[10px] text-[#9CA3AF] border border-white/8 rounded-full">
                 {code}
               </span>
+              <Tooltip label="Show QR Code for mobile scan">
+                <motion.button
+                  type="button"
+                  whileTap={{ scale: 0.96 }}
+                  onClick={() => setShowQrModal(true)}
+                  className="control-chip px-2.5 sm:px-3 py-1.5 text-[11px] sm:text-sm font-medium min-h-[36px] inline-flex items-center gap-1.5 text-[#8A5CF5]"
+                >
+                  <TwoToneIcon icon={QrCode} tone="violet" size={14} />
+                  <span className="hidden sm:inline">QR</span>
+                </motion.button>
+              </Tooltip>
               <Tooltip label="Copy room invite link">
                 <motion.button
                   type="button"
@@ -258,17 +273,31 @@ export function RoomShell({ code }: { code: string }) {
                 {title}
               </motion.h1>
             </AnimatePresence>
-            <p
-              className={`text-xs sm:text-sm line-clamp-1 mt-0.5 ${
-                connected
-                  ? "text-emerald-400/90"
-                  : state.partnerPresent
-                    ? "text-amber-300/90"
-                    : "text-[#9CA3AF]"
-              }`}
-            >
-              {state.status}
-            </p>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <p
+                className={`text-xs sm:text-sm line-clamp-1 ${
+                  connected
+                    ? "text-emerald-400/90"
+                    : state.partnerPresent
+                      ? "text-amber-300/90"
+                      : "text-[#9CA3AF]"
+                }`}
+              >
+                {state.status}
+              </p>
+              {state.partnerPresent ? (
+                <Tooltip label="Re-sync room connection">
+                  <button
+                    type="button"
+                    onClick={room.resync}
+                    className="text-[#9CA3AF] hover:text-white transition-colors p-0.5"
+                    aria-label="Re-sync room"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                  </button>
+                </Tooltip>
+              ) : null}
+            </div>
           </div>
           <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs shrink-0">
             <div className="px-2 sm:px-3 py-1 rounded-full glass truncate border border-white/8">
@@ -400,11 +429,72 @@ export function RoomShell({ code }: { code: string }) {
                   </span>
                 </div>
               ) : null}
+              {connected && (!state.partnerMicOn || !state.partnerCamOn) ? (
+                <div className="absolute top-1.5 right-1.5 flex gap-1 bg-[#0A0B10]/80 backdrop-blur-md rounded-full px-1.5 py-0.5 border border-white/10 pointer-events-none z-10">
+                  {!state.partnerMicOn ? (
+                    <MicOff className="w-3 h-3 text-rose-400" />
+                  ) : null}
+                  {!state.partnerCamOn ? (
+                    <CameraOff className="w-3 h-3 text-amber-400" />
+                  ) : null}
+                </div>
+              ) : null}
               <div className="absolute bottom-0.5 inset-x-0 text-center text-[7px] sm:text-[9px] tracking-widest text-white/70 pointer-events-none">
                 {connected ? "PARTNER" : "…"}
               </div>
             </div>
           </DraggableBubble>
+
+          <AnimatePresence>
+            {showQrModal ? (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md">
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  className="relative w-full max-w-sm rounded-3xl border border-white/10 bg-[#12141D] p-6 text-center shadow-2xl space-y-4"
+                >
+                  <button
+                    type="button"
+                    onClick={() => setShowQrModal(false)}
+                    className="absolute top-4 right-4 text-white/50 hover:text-white p-1 transition-colors"
+                  >
+                    <X size={18} />
+                  </button>
+                  <div className="flex justify-center">
+                    <div className="w-12 h-12 rounded-2xl bg-[#8A5CF5]/15 border border-[#8A5CF5]/30 flex items-center justify-center">
+                      <TwoToneIcon icon={QrCode} tone="violet" size={24} />
+                    </div>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold tracking-tight">Scan to Join Date Room</h3>
+                    <p className="text-xs text-[#9CA3AF] mt-1">
+                      Scan with your partner&apos;s phone camera to join room <span className="font-mono text-white font-semibold">{code}</span>
+                    </p>
+                  </div>
+                  <div className="flex justify-center p-3 bg-white rounded-2xl shadow-inner">
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
+                        (process.env.NEXT_PUBLIC_APP_URL || (typeof window !== "undefined" ? window.location.origin : "https://justduo.vercel.app")) + "/room/" + code
+                      )}`}
+                      alt="Room QR Code"
+                      className="w-48 h-48 rounded-lg"
+                    />
+                  </div>
+                  <div className="pt-1">
+                    <motion.button
+                      type="button"
+                      whileTap={{ scale: 0.97 }}
+                      onClick={copyLink}
+                      className="w-full py-2.5 rounded-full bg-[#FF5A79] text-white text-xs sm:text-sm font-semibold hover:bg-[#FF5A79]/90 transition-colors inline-flex items-center justify-center gap-2"
+                    >
+                      <Copy size={15} /> Copy Invite Link
+                    </motion.button>
+                  </div>
+                </motion.div>
+              </div>
+            ) : null}
+          </AnimatePresence>
 
           {reactions.map((r) => {
             const meta = REACTIONS.find((x) => x.id === r.kind) || REACTIONS[0]!;

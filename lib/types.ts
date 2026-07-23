@@ -9,7 +9,9 @@ export type GameId =
   | "word-association"
   | "starts-with"
   | "start-end"
-  | "places";
+  | "places"
+  | "most-likely"
+  | "couples-quiz";
 
 export type PeerRole = "host" | "guest";
 
@@ -39,6 +41,7 @@ export type DuoAppMessage =
   | { type: "dinner.deal"; cards: DinnerCard[] }
   | { type: "screen.start" }
   | { type: "screen.stop" }
+  | { type: "media.state"; micOn: boolean; camOn: boolean }
   | { type: "room.sync_request" }
   | {
       type: "room.sync_state";
@@ -46,6 +49,8 @@ export type DuoAppMessage =
       cinemaSource: CinemaSource;
       ytVideoId: string | null;
       ytTitle: string;
+      partnerMicOn?: boolean;
+      partnerCamOn?: boolean;
     };
 
 export interface DinnerCard {

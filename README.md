@@ -12,9 +12,12 @@
 ### Highlights
 - 📽️ **Synchronized Co-Watching**: Search, queue, and watch YouTube videos together with frame-accurate play/pause/seek sync.
 - 💬 **Dinner Prompts & AI Pack Refresh**: Curated conversation starters (Would You Rather, Deep Questions, Icebreakers) backed by local fallback packs and optional Mistral AI generation.
-- 🎮 **Co-op Mini Games**: Interactive turn-based games including *Word Association*, *Starts With*, *Start & End*, *Places*, and *Would You Rather*.
+- 🎮 **7 Co-op Mini Games**: Interactive turn-based games including *Most Likely To…*, *Who Knows Who Better? (Couples Quiz)*, *Would You Rather*, *Word Association*, *Starts With*, *Start & End*, and *Places*.
+- 📱 **Mobile QR Code Scan & Join**: Instant QR code modal for scanning on mobile phones without typing URLs.
 - 🎙️ **Voice-Activated Audio Ducking (VAD)**: Smart Web Audio engine automatically lowers YouTube/media audio when either partner speaks, ensuring clear conversation.
 - 🖥️ **High-FPS Screen Share**: Share your browser window or full display directly inside the room stage.
+- 🔄 **One-Tap Re-Sync & Media Badges**: Re-sync room connection anytime + real-time partner mic/camera status badges.
+- 🖼️ **Rich Open Graph & App Icons**: Custom social sharing cards & glowing squircle favicons.
 - 📊 **Vercel Analytics Integration**: Built-in privacy-friendly visitor and date-session tracking.
 - ⚡ **Dual-Path Realtime Resilience**: WebRTC DataChannel paired with Supabase Realtime Broadcast fallback for instant state synchronization even across strict networks/firewalls.
 

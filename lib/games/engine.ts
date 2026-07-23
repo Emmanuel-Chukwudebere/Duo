@@ -75,6 +75,18 @@ export function normalizeDeal(
     };
   }
 
+  if (gameId === "most-likely") {
+    return {
+      prompt: String(o.prompt || fallback.prompt),
+    };
+  }
+
+  if (gameId === "couples-quiz") {
+    return {
+      question: String(o.question || fallback.question),
+    };
+  }
+
   return { ...fallback, ...o };
 }
 
@@ -104,6 +116,14 @@ function dealGameRaw(gameId: GameId): unknown {
         hint: packs.placesHint,
         used: [] as string[],
       };
+    case "most-likely":
+      return {
+        prompt: pick(packs.mostLikely),
+      };
+    case "couples-quiz":
+      return {
+        question: pick(packs.couplesQuiz),
+      };
     default:
       return {};
   }
@@ -121,6 +141,16 @@ export const GAME_META: Record<
     title: "Would You Rather",
     blurb: "Pick A or B — reveal together",
     accent: "#FF5A79",
+  },
+  "most-likely": {
+    title: "Most Likely To…",
+    blurb: "Vote who is most likely to do it",
+    accent: "#EC4899",
+  },
+  "couples-quiz": {
+    title: "Who Knows Who Better?",
+    blurb: "Guess your partner's secret answer",
+    accent: "#F59E0B",
   },
   "word-association": {
     title: "Word Association",
