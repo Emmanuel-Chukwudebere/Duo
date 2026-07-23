@@ -168,10 +168,8 @@ export function DinnerStage({
         </AnimatePresence>
       </div>
 
-      <motion.div
-        layout
-        className="rounded-3xl p-4 space-y-3 border border-white/10 bg-[#181B26]/80"
-      >
+      {/* No Framer layout here — transforms break the YouTube iframe */}
+      <div className="rounded-3xl p-4 space-y-3 border border-white/10 bg-[#181B26] shrink-0">
         <div className="flex items-center justify-between gap-2">
           <div className="text-xs uppercase tracking-wider text-[#9CA3AF]">
             Soundtrack · YouTube
@@ -183,17 +181,25 @@ export function DinnerStage({
           ) : null}
         </div>
         {isYtController ? (
-          <YouTubeSearch onPick={onLoadYoutube} />
+          <YouTubeSearch
+            onPick={(id, title) => {
+              onLoadYoutube(id, title);
+              toast(title ? `Playing · ${title}` : "Playing in Dinner…");
+            }}
+          />
         ) : (
           <p className="text-xs text-[#9CA3AF]">
             Partner controls the soundtrack — ask them to load a track.
           </p>
         )}
         <YouTubePlayer
+          key={`dinner-${ytVideoId || "empty"}`}
+          instanceId="dinner"
           videoId={ytVideoId}
           isController={isYtController}
           duckLevel={duckLevel}
           compact
+          autoPlayOnLoad
           remoteCommand={remoteYtCommand}
           onPlay={() => onYtEvent({ type: "yt.play" })}
           onPause={() => onYtEvent({ type: "yt.pause" })}
@@ -201,7 +207,12 @@ export function DinnerStage({
             onYtEvent({ type: "yt.time", seconds, playing })
           }
         />
-      </motion.div>
+        {ytVideoId && isYtController ? (
+          <p className="text-[10px] text-[#9CA3AF]">
+            If audio is silent, tap the play button on the player.
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 }

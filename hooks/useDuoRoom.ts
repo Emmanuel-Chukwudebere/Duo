@@ -53,6 +53,8 @@ export interface DuoRoomState {
   camOn: boolean;
   sharing: boolean;
   remoteSharing: boolean;
+  /** Bumps when local screen stream is set/cleared so UI can re-bind the preview video */
+  screenPreviewKey: number;
   ytControllerId: string;
   ytVideoId: string | null;
   ytTitle: string;
@@ -82,6 +84,7 @@ export function useDuoRoom(roomCode: string) {
       camOn: true,
       sharing: false,
       remoteSharing: false,
+      screenPreviewKey: 0,
       ytControllerId: peerId,
       ytVideoId: null,
       ytTitle: "",
@@ -731,6 +734,19 @@ export function useDuoRoom(roomCode: string) {
     update({ camOn: track.enabled });
   }, [update]);
 
+  const bindLocalScreenPreview = useCallback(() => {
+    const el = screenVideoRef.current;
+    const stream = screenStreamRef.current;
+    if (!el || !stream) return false;
+    if (el.srcObject !== stream) {
+      el.srcObject = stream;
+    }
+    el.muted = true;
+    el.playsInline = true;
+    void el.play().catch(() => undefined);
+    return true;
+  }, []);
+
   const stopScreenShare = useCallback(() => {
     const pc = pcRef.current;
     for (const sender of screenSendersRef.current) {
@@ -745,10 +761,15 @@ export function useDuoRoom(roomCode: string) {
     screenStreamRef.current = null;
     if (screenVideoRef.current) {
       const remoteScreen = remoteScreenStreamRef.current;
-      screenVideoRef.current.srcObject =
-        remoteScreen.getVideoTracks().length > 0 ? remoteScreen : null;
+      if (remoteScreen.getVideoTracks().length > 0) {
+        screenVideoRef.current.srcObject = remoteScreen;
+        screenVideoRef.current.muted = false;
+        void screenVideoRef.current.play().catch(() => undefined);
+      } else {
+        screenVideoRef.current.srcObject = null;
+      }
     }
-    update({ sharing: false });
+    update({ sharing: false, screenPreviewKey: Date.now() });
     sendApp({ type: "screen.stop" });
     if (isInitiatorRef.current) void createAndSendOffer();
   }, [createAndSendOffer, sendApp, update]);
@@ -761,7 +782,9 @@ export function useDuoRoom(roomCode: string) {
     try {
       if (screenStreamRef.current) stopScreenShare();
       const screen = await navigator.mediaDevices.getDisplayMedia({
-        video: true,
+        video: {
+          displaySurface: "monitor",
+        } as MediaTrackConstraints,
         audio: true,
       });
       screenStreamRef.current = screen;
@@ -773,10 +796,28 @@ export function useDuoRoom(roomCode: string) {
           /* optional */
         }
       }
-      if (screenVideoRef.current) {
-        screenVideoRef.current.srcObject = screen;
-        void screenVideoRef.current.play().catch(() => undefined);
-      }
+
+      // Switch UI to Cinema → Screen first so the <video> mounts
+      update({
+        sharing: true,
+        cinemaSource: "screen",
+        mode: "cinema",
+        status: "Sharing screen — you should see your preview",
+        screenPreviewKey: Date.now(),
+      });
+      sendApp({ type: "screen.start" });
+      sendApp({ type: "mode.switch", mode: "cinema" });
+      sendApp({ type: "cinema.source", source: "screen" });
+
+      // Bind preview now and again after paint (ref may be null until Cinema mounts)
+      bindLocalScreenPreview();
+      requestAnimationFrame(() => {
+        bindLocalScreenPreview();
+        window.setTimeout(() => bindLocalScreenPreview(), 50);
+        window.setTimeout(() => bindLocalScreenPreview(), 200);
+        window.setTimeout(() => bindLocalScreenPreview(), 500);
+      });
+
       const pc = ensurePc();
       const senders: RTCRtpSender[] = [];
       for (const track of screen.getTracks()) {
@@ -789,22 +830,20 @@ export function useDuoRoom(roomCode: string) {
           update({ cinemaSource: "youtube" });
         };
       }
-      sendApp({ type: "screen.start" });
-      sendApp({ type: "mode.switch", mode: "cinema" });
-      sendApp({ type: "cinema.source", source: "screen" });
       if (isInitiatorRef.current || partnerIdRef.current) {
         void createAndSendOffer();
       }
-      update({
-        sharing: true,
-        cinemaSource: "screen",
-        mode: "cinema",
-        status: "Sharing screen",
-      });
     } catch {
       update({ status: "Screen share cancelled" });
     }
-  }, [createAndSendOffer, ensurePc, sendApp, stopScreenShare, update]);
+  }, [
+    bindLocalScreenPreview,
+    createAndSendOffer,
+    ensurePc,
+    sendApp,
+    stopScreenShare,
+    update,
+  ]);
 
   const loadYoutube = useCallback(
     (videoId: string, title?: string) => {
@@ -898,5 +937,9 @@ export function useDuoRoom(roomCode: string) {
     sendReaction,
     isYtController,
     duckLevel: state.duckLevel,
+    /** Call after the screen <video> mounts to attach local/remote stream */
+    bindLocalScreenPreview,
+    getLocalScreenStream: () => screenStreamRef.current,
+    getRemoteScreenStream: () => remoteScreenStreamRef.current,
   };
 }

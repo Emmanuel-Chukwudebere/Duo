@@ -62,6 +62,12 @@ export function RoomShell({ code }: { code: string }) {
     seconds?: number;
     videoId?: string;
   } | null>(null);
+  const [bubblesCollapsed, setBubblesCollapsed] = useState(false);
+
+  useEffect(() => {
+    // Auto-shrink bubbles in cinema so they don't cover the movie
+    setBubblesCollapsed(state.mode === "cinema");
+  }, [state.mode]);
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -121,7 +127,9 @@ export function RoomShell({ code }: { code: string }) {
   async function copyLink() {
     const base =
       process.env.NEXT_PUBLIC_APP_URL ||
-      (typeof window !== "undefined" ? window.location.origin : "https://justduo.vercel.app");
+      (typeof window !== "undefined"
+        ? window.location.origin
+        : "https://justduo.vercel.app");
     const link = `${base.replace(/\/$/, "")}/room/${code}`;
     try {
       if (navigator.clipboard?.writeText) {
@@ -151,28 +159,29 @@ export function RoomShell({ code }: { code: string }) {
     state.connection === "connected" ||
     state.status.toLowerCase().includes("connected");
 
+  const bubbleSize = bubblesCollapsed
+    ? "w-14 h-14 sm:w-16 sm:h-16"
+    : "w-[72px] h-[72px] sm:w-[100px] sm:h-[100px] md:w-[112px] md:h-[112px]";
+
   return (
-    <div className="min-h-dvh flex flex-col pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:pb-28 px-3 sm:px-6 md:px-8 max-w-[1280px] mx-auto">
+    <div className="min-h-dvh flex flex-col bg-[#0A0B10]">
       <ToastHost />
 
-      {/* Sticky (not fixed overlay) so content never crops under the nav */}
-      <header className="sticky top-0 z-50 -mx-3 sm:-mx-6 md:-mx-8 px-3 sm:px-6 md:px-8 pt-[max(0.5rem,env(safe-area-inset-top))] pb-2 bg-[#0A0B10]/90 backdrop-blur-md">
-        <motion.div
-          layout
-          className="glass rounded-2xl flex flex-col gap-2 px-2 py-2 border border-white/10 max-w-[960px] mx-auto"
-        >
+      {/*
+        Sticky header sits in normal flow (doesn't cover first paint).
+        scroll-mt on main content keeps anchors clear.
+      */}
+      <header className="sticky top-0 z-50 border-b border-white/[0.06] bg-[#0A0B10]/95 backdrop-blur-md pt-[env(safe-area-inset-top)]">
+        <div className="mx-auto max-w-[1280px] px-3 sm:px-6 md:px-8 py-2 space-y-2">
           <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 pl-2 min-w-0">
+            <div className="flex items-center gap-2 min-w-0">
               <div className="w-8 h-8 rounded-xl bg-[#FF5A79]/12 border border-[#FF5A79]/25 flex items-center justify-center shrink-0">
                 <TwoToneIcon icon={Heart} tone="rose" size={16} />
               </div>
               <span className="font-semibold tracking-tight text-sm sm:text-base">
                 Duo
               </span>
-            </div>
-
-            <div className="flex items-center gap-1.5 pr-1 shrink-0">
-              <div className="px-2 sm:px-3 py-1 bg-[#0A0B10] rounded-full flex items-center gap-1.5 text-[10px] sm:text-xs border border-white/8">
+              <div className="hidden xs:flex sm:flex px-2 py-0.5 bg-[#12141D] rounded-full items-center gap-1.5 text-[10px] sm:text-xs border border-white/8 ml-1">
                 <span
                   className={`w-1.5 h-1.5 rounded-full shrink-0 ${
                     connected
@@ -184,6 +193,12 @@ export function RoomShell({ code }: { code: string }) {
                 />
                 <span className="font-mono text-[#9CA3AF]">{code}</span>
               </div>
+            </div>
+
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span className="sm:hidden px-2 py-0.5 font-mono text-[10px] text-[#9CA3AF] border border-white/8 rounded-full">
+                {code}
+              </span>
               <Tooltip label="Copy room invite link">
                 <motion.button
                   type="button"
@@ -198,17 +213,16 @@ export function RoomShell({ code }: { code: string }) {
             </div>
           </div>
 
-          <div className="flex items-center justify-center bg-[#0A0B10] rounded-full p-1 w-full border border-white/6">
+          <div className="flex items-center bg-[#12141D] rounded-full p-1 w-full border border-white/6">
             {MODES.map((m) => {
               const active = state.mode === m.id;
               return (
                 <motion.button
                   key={m.id}
                   type="button"
-                  layout
                   whileTap={{ scale: 0.97 }}
                   onClick={() => room.setMode(m.id)}
-                  className={`mode-tab flex-1 sm:flex-none px-2.5 sm:px-3.5 py-2 text-xs sm:text-sm font-medium rounded-full min-h-[40px] inline-flex items-center justify-center gap-1.5 border border-transparent ${
+                  className={`mode-tab flex-1 px-2 sm:px-3.5 py-2 text-xs sm:text-sm font-medium rounded-full min-h-[40px] inline-flex items-center justify-center gap-1.5 border border-transparent ${
                     active ? "active" : "text-[#9CA3AF] hover:bg-white/[0.04]"
                   }`}
                 >
@@ -223,161 +237,195 @@ export function RoomShell({ code }: { code: string }) {
               );
             })}
           </div>
-        </motion.div>
+        </div>
       </header>
 
-      <div className="flex items-start sm:items-center justify-between gap-2 mb-2 sm:mb-3 mt-1 px-0.5">
-        <div className="min-w-0 flex-1">
-          <AnimatePresence mode="wait">
-            <motion.h1
-              key={state.mode}
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              transition={{ duration: 0.2 }}
-              className="text-xl sm:text-2xl md:text-3xl font-semibold tracking-tighter truncate"
+      {/* Scrollable main — clears sticky header + fixed dock */}
+      <main className="flex-1 w-full max-w-[1280px] mx-auto px-3 sm:px-6 md:px-8 pt-3 sm:pt-4 pb-[calc(6.5rem+env(safe-area-inset-bottom))] sm:pb-32">
+        <div className="flex items-start sm:items-center justify-between gap-2 mb-3 px-0.5">
+          <div className="min-w-0 flex-1">
+            <AnimatePresence mode="wait">
+              <motion.h1
+                key={state.mode}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.2 }}
+                className="text-xl sm:text-2xl md:text-3xl font-semibold tracking-tighter truncate"
+              >
+                {title}
+              </motion.h1>
+            </AnimatePresence>
+            <p
+              className={`text-xs sm:text-sm line-clamp-2 mt-0.5 ${
+                connected
+                  ? "text-emerald-400/90"
+                  : state.partnerPresent
+                    ? "text-amber-300/90"
+                    : "text-[#9CA3AF]"
+              }`}
             >
-              {title}
-            </motion.h1>
-          </AnimatePresence>
-          <p
-            className={`text-xs sm:text-sm line-clamp-2 mt-0.5 ${
-              connected
-                ? "text-emerald-400/90"
-                : state.partnerPresent
-                  ? "text-amber-300/90"
-                  : "text-[#9CA3AF]"
+              {state.status}
+            </p>
+          </div>
+          <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs shrink-0">
+            <div className="px-2 sm:px-3 py-1 rounded-full glass truncate border border-white/8">
+              {state.partnerPresent
+                ? connected
+                  ? "You + partner"
+                  : "Partner joining…"
+                : "Just you"}
+            </div>
+            <div className="px-2 sm:px-3 py-1 rounded-full glass text-[#9CA3AF] tabular-nums border border-white/8">
+              {timer}
+            </div>
+          </div>
+        </div>
+
+        {/* Stage: cinema gets extra bottom pad so bubbles never sit on the film */}
+        <div
+          id="stage-area"
+          className={`stage-surface relative w-full rounded-2xl sm:rounded-3xl border border-white/10 ${
+            state.mode === "cinema"
+              ? "min-h-[min(70dvh,640px)] overflow-hidden"
+              : "min-h-[min(62dvh,560px)] overflow-hidden"
+          }`}
+        >
+          <div
+            className={`absolute inset-0 ${
+              state.mode === "cinema"
+                ? "pb-20 sm:pb-24"
+                : "pb-16 sm:pb-20"
             }`}
           >
-            {state.status}
-          </p>
-        </div>
-        <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs shrink-0">
-          <div className="px-2 sm:px-3 py-1 rounded-full glass truncate border border-white/8">
-            {state.partnerPresent
-              ? connected
-                ? "You + partner"
-                : "Partner joining…"
-              : "Just you"}
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={state.mode}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18 }}
+                className="absolute inset-0"
+              >
+                {state.mode === "dinner" ? (
+                  <DinnerStage
+                    sendApp={room.sendApp}
+                    onAppMessage={room.onAppMessage}
+                    isYtController={room.isYtController}
+                    ytVideoId={state.ytVideoId}
+                    ytTitle={state.ytTitle}
+                    duckLevel={room.duckLevel}
+                    onLoadYoutube={room.loadYoutube}
+                    remoteYtCommand={remoteYtCommand}
+                    onYtEvent={onYtEvent}
+                  />
+                ) : null}
+                {state.mode === "games" ? (
+                  <GamesStage
+                    sendApp={room.sendApp}
+                    onAppMessage={room.onAppMessage}
+                  />
+                ) : null}
+                {state.mode === "cinema" ? (
+                  <CinemaStage
+                    cinemaSource={state.cinemaSource}
+                    setCinemaSource={room.setCinemaSource}
+                    isYtController={room.isYtController}
+                    ytVideoId={state.ytVideoId}
+                    ytTitle={state.ytTitle}
+                    duckLevel={room.duckLevel}
+                    onLoadYoutube={room.loadYoutube}
+                    remoteYtCommand={remoteYtCommand}
+                    onYtEvent={onYtEvent}
+                    takeYtControl={room.takeYtControl}
+                    screenVideoRef={room.screenVideoRef}
+                    sharing={state.sharing}
+                    remoteSharing={state.remoteSharing}
+                    screenPreviewKey={state.screenPreviewKey}
+                    startScreenShare={room.startScreenShare}
+                    stopScreenShare={room.stopScreenShare}
+                    bindLocalScreenPreview={room.bindLocalScreenPreview}
+                    getLocalScreenStream={room.getLocalScreenStream}
+                    getRemoteScreenStream={room.getRemoteScreenStream}
+                  />
+                ) : null}
+              </motion.div>
+            </AnimatePresence>
           </div>
-          <div className="px-2 sm:px-3 py-1 rounded-full glass text-[#9CA3AF] tabular-nums border border-white/8">
-            {timer}
-          </div>
-        </div>
-      </div>
 
-      <div
-        id="stage-area"
-        className="stage-surface relative flex-1 min-h-[min(58dvh,520px)] sm:min-h-[420px] rounded-2xl sm:rounded-3xl overflow-hidden"
-      >
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={state.mode}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-            className="absolute inset-0"
+          {/* PiP bubbles — LEFT side in cinema so movie stays clear; collapsible */}
+          <div
+            className={`absolute z-30 flex gap-2 ${
+              state.mode === "cinema"
+                ? "bottom-3 left-3 flex-row"
+                : "bottom-3 right-3 flex-row-reverse"
+            }`}
           >
-            {state.mode === "dinner" ? (
-              <DinnerStage
-                sendApp={room.sendApp}
-                onAppMessage={room.onAppMessage}
-                isYtController={room.isYtController}
-                ytVideoId={state.ytVideoId}
-                ytTitle={state.ytTitle}
-                duckLevel={room.duckLevel}
-                onLoadYoutube={room.loadYoutube}
-                remoteYtCommand={remoteYtCommand}
-                onYtEvent={onYtEvent}
-              />
-            ) : null}
-            {state.mode === "games" ? (
-              <GamesStage
-                sendApp={room.sendApp}
-                onAppMessage={room.onAppMessage}
-              />
-            ) : null}
-            {state.mode === "cinema" ? (
-              <CinemaStage
-                cinemaSource={state.cinemaSource}
-                setCinemaSource={room.setCinemaSource}
-                isYtController={room.isYtController}
-                ytVideoId={state.ytVideoId}
-                ytTitle={state.ytTitle}
-                duckLevel={room.duckLevel}
-                onLoadYoutube={room.loadYoutube}
-                remoteYtCommand={remoteYtCommand}
-                onYtEvent={onYtEvent}
-                takeYtControl={room.takeYtControl}
-                screenVideoRef={room.screenVideoRef}
-                sharing={state.sharing}
-                remoteSharing={state.remoteSharing}
-                startScreenShare={room.startScreenShare}
-                stopScreenShare={room.stopScreenShare}
-              />
-            ) : null}
-          </motion.div>
-        </AnimatePresence>
-
-        <motion.div
-          layout
-          className={`video-bubble absolute z-40 bottom-[max(0.75rem,env(safe-area-inset-bottom))] right-3 sm:bottom-6 sm:right-6 w-[72px] h-[72px] sm:w-[120px] sm:h-[120px] md:w-[132px] md:h-[132px] ${
-            state.localSpeaking ? "speaking" : ""
-          }`}
-          style={{ opacity: state.camOn ? 1 : 0.45 }}
-        >
-          <video
-            ref={room.localVideoRef}
-            autoPlay
-            muted
-            playsInline
-            className="w-full h-full object-cover"
-          />
-          <div className="absolute bottom-1 sm:bottom-2 inset-x-0 text-center text-[8px] sm:text-[10px] tracking-widest text-white/70">
-            YOU
-          </div>
-        </motion.div>
-        <motion.div
-          layout
-          className={`video-bubble absolute z-40 bottom-[max(0.75rem,env(safe-area-inset-bottom))] right-[5.5rem] sm:bottom-6 sm:right-[148px] md:right-[160px] w-[72px] h-[72px] sm:w-[120px] sm:h-[120px] md:w-[132px] md:h-[132px] ${
-            state.remoteSpeaking ? "speaking" : ""
-          }`}
-        >
-          <video
-            ref={room.remoteVideoRef}
-            autoPlay
-            playsInline
-            // Not muted — partner audio comes through this element
-            className="w-full h-full object-cover bg-[#0A0B10]"
-          />
-          {!state.partnerPresent || !connected ? (
-            <div className="absolute inset-0 flex items-center justify-center bg-[#12141D]/80">
-              <span className="text-[9px] sm:text-[10px] text-white/40 tracking-wider px-2 text-center">
-                {state.partnerPresent ? "…" : "WAIT"}
-              </span>
-            </div>
-          ) : null}
-          <div className="absolute bottom-1 sm:bottom-2 inset-x-0 text-center text-[8px] sm:text-[10px] tracking-widest text-white/70">
-            {connected ? "PARTNER" : state.partnerPresent ? "LINKING" : "…"}
-          </div>
-        </motion.div>
-
-        {reactions.map((r) => {
-          const meta = REACTIONS.find((x) => x.id === r.kind) || REACTIONS[0]!;
-          return (
-            <div
-              key={r.id}
-              className="reaction-float"
-              style={{ left: `${r.left}%`, bottom: 100 }}
+            <button
+              type="button"
+              onClick={() => setBubblesCollapsed((c) => !c)}
+              className="absolute -top-6 left-0 text-[10px] text-[#9CA3AF] hover:text-white hidden sm:block"
             >
-              <TwoToneIcon icon={meta.icon} tone={meta.tone} size={28} />
-            </div>
-          );
-        })}
-      </div>
+              {bubblesCollapsed ? "Expand cams" : "Shrink cams"}
+            </button>
 
-      {/* Duck level chip when talking */}
+            <div
+              className={`video-bubble relative ${bubbleSize} ${
+                state.localSpeaking ? "speaking" : ""
+              }`}
+              style={{ opacity: state.camOn ? 1 : 0.45 }}
+            >
+              <video
+                ref={room.localVideoRef}
+                autoPlay
+                muted
+                playsInline
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute bottom-0.5 inset-x-0 text-center text-[7px] sm:text-[9px] tracking-widest text-white/70">
+                YOU
+              </div>
+            </div>
+
+            <div
+              className={`video-bubble relative ${bubbleSize} ${
+                state.remoteSpeaking ? "speaking" : ""
+              }`}
+            >
+              <video
+                ref={room.remoteVideoRef}
+                autoPlay
+                playsInline
+                className="w-full h-full object-cover bg-[#0A0B10]"
+              />
+              {!state.partnerPresent || !connected ? (
+                <div className="absolute inset-0 flex items-center justify-center bg-[#12141D]/80">
+                  <span className="text-[8px] text-white/40 tracking-wider">
+                    {state.partnerPresent ? "…" : "—"}
+                  </span>
+                </div>
+              ) : null}
+              <div className="absolute bottom-0.5 inset-x-0 text-center text-[7px] sm:text-[9px] tracking-widest text-white/70">
+                {connected ? "PARTNER" : "…"}
+              </div>
+            </div>
+          </div>
+
+          {reactions.map((r) => {
+            const meta = REACTIONS.find((x) => x.id === r.kind) || REACTIONS[0]!;
+            return (
+              <div
+                key={r.id}
+                className="reaction-float"
+                style={{ left: `${r.left}%`, bottom: 100 }}
+              >
+                <TwoToneIcon icon={meta.icon} tone={meta.tone} size={28} />
+              </div>
+            );
+          })}
+        </div>
+      </main>
+
       {state.localSpeaking || room.duckLevel < 0.95 ? (
         <div className="fixed bottom-[4.75rem] left-1/2 -translate-x-1/2 z-40 pointer-events-none hidden sm:block">
           <div className="rounded-full border border-white/10 bg-[#12141D]/95 px-3 py-1 text-[10px] text-[#FFB35C] tabular-nums">
@@ -386,7 +434,7 @@ export function RoomShell({ code }: { code: string }) {
         </div>
       ) : null}
 
-      <div className="fixed bottom-[max(0.5rem,env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 z-50 w-[min(100%-0.75rem,640px)]">
+      <div className="fixed bottom-[max(0.5rem,env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 z-50 w-[min(100%-0.75rem,640px)] px-1">
         <motion.div
           layout
           className="glass px-1.5 sm:px-2 py-1.5 sm:py-2 rounded-2xl sm:rounded-3xl flex items-center gap-0.5 sm:gap-1 border border-white/10 overflow-x-auto no-scrollbar justify-start sm:justify-center"
@@ -460,8 +508,7 @@ export function RoomShell({ code }: { code: string }) {
               type="button"
               whileTap={{ scale: 0.96 }}
               onClick={() => {
-                const next =
-                  state.duckingMode === "auto" ? "off" : "auto";
+                const next = state.duckingMode === "auto" ? "off" : "auto";
                 room.setDuckingMode(next);
                 toast(
                   next === "auto"
