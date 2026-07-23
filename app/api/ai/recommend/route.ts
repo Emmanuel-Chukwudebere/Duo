@@ -23,5 +23,13 @@ Prefer known nextGameId games. newIdea can be any talk game idea.`,
     `Last game: ${body.lastGame || "none"}. Mood: ${body.mood || "cozy"}. Suggest next.`,
   );
 
-  return NextResponse.json(ai || fallback);
+  if (ai.ok && ai.data) {
+    return NextResponse.json({ ...ai.data, source: "mistral", model: ai.model });
+  }
+
+  return NextResponse.json({
+    ...fallback,
+    source: "pack",
+    aiError: ai.ok ? undefined : ai.error,
+  });
 }

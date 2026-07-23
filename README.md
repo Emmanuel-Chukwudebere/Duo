@@ -26,7 +26,8 @@ cp .env.example .env.local
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | anon public JWT |
 | `YOUTUBE_API_KEY` | Server only |
 | `MISTRAL_API_KEY` | Server only, optional |
-| `NEXT_PUBLIC_APP_URL` | e.g. `http://localhost:3000` |
+| `NEXT_PUBLIC_APP_URL` | Production: `https://justduo.vercel.app` |
+| `MISTRAL_MODEL` | Optional model override |
 
 3. Supabase: enable Realtime (default). No tables required for MVP (channel presence + broadcast).
 

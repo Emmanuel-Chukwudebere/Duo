@@ -1,9 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { motion } from "framer-motion";
+import { Loader2, Search } from "lucide-react";
 import type { YtSearchItem } from "@/lib/types";
 import { parseYouTubeVideoId } from "@/lib/youtube/parse";
 import { toast } from "@/components/shell/Toast";
+import { TwoToneIcon } from "@/components/ui/TwoToneIcon";
 
 export function YouTubeSearch({
   onPick,
@@ -21,7 +24,12 @@ export function YouTubeSearch({
     if (!query) return;
 
     const asId = parseYouTubeVideoId(query);
-    if (asId && (query.includes("youtube") || query.includes("youtu.be") || query.length === 11)) {
+    if (
+      asId &&
+      (query.includes("youtube") ||
+        query.includes("youtu.be") ||
+        query.length === 11)
+    ) {
       onPick(asId);
       toast("Loaded YouTube video");
       return;
@@ -39,6 +47,7 @@ export function YouTubeSearch({
         return;
       }
       setItems(data.items || []);
+      if (!(data.items || []).length) toast("No results");
     } catch {
       toast("Search failed");
     } finally {
@@ -49,32 +58,45 @@ export function YouTubeSearch({
   return (
     <div className="space-y-3">
       <div className="flex gap-2">
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && !disabled && search()}
-          disabled={disabled}
-          placeholder="Search YouTube or paste a link"
-          className="flex-1 bg-[#0A0B10] border border-white/10 rounded-2xl px-4 py-2.5 text-sm outline-none focus:border-[#FFB35C]/40 disabled:opacity-50"
-        />
-        <button
+        <div className="relative flex-1">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
+            <TwoToneIcon icon={Search} tone="muted" size={16} />
+          </span>
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && !disabled && search()}
+            disabled={disabled}
+            placeholder="Search YouTube or paste a link"
+            className="w-full bg-[#0A0B10] border border-white/10 rounded-2xl pl-10 pr-4 py-2.5 text-sm outline-none focus:border-[#FFB35C]/35 disabled:opacity-50 min-h-[44px] transition-colors"
+          />
+        </div>
+        <motion.button
           type="button"
+          whileTap={{ scale: 0.97 }}
           disabled={disabled || loading}
           onClick={search}
-          className="px-4 rounded-2xl bg-white/10 hover:bg-white/15 text-sm font-medium disabled:opacity-50"
+          className="px-4 rounded-2xl bg-white/[0.06] border border-white/10 hover:bg-white/[0.09] text-sm font-medium disabled:opacity-50 min-h-[44px] min-w-[4.5rem] inline-flex items-center justify-center"
         >
-          {loading ? "…" : "Search"}
-        </button>
+          {loading ? (
+            <Loader2 className="w-4 h-4 animate-spin text-[#FFB35C]" />
+          ) : (
+            "Search"
+          )}
+        </motion.button>
       </div>
       {items.length > 0 ? (
-        <div className="grid gap-2 max-h-48 overflow-y-auto pr-1">
-          {items.map((item) => (
-            <button
+        <div className="grid gap-1.5 max-h-48 overflow-y-auto pr-1">
+          {items.map((item, i) => (
+            <motion.button
               key={item.id}
               type="button"
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.03 }}
               disabled={disabled}
               onClick={() => onPick(item.id, item.title)}
-              className="flex gap-3 text-left p-2 rounded-2xl hover:bg-white/5 border border-transparent hover:border-white/10 transition disabled:opacity-50"
+              className="flex gap-3 text-left p-2 rounded-2xl hover:bg-white/[0.04] border border-transparent hover:border-white/10 transition disabled:opacity-50"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
@@ -88,7 +110,7 @@ export function YouTubeSearch({
                   {item.channelTitle}
                 </div>
               </div>
-            </button>
+            </motion.button>
           ))}
         </div>
       ) : null}

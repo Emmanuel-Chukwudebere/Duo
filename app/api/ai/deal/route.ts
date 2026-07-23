@@ -18,6 +18,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid gameId" }, { status: 400 });
   }
 
+  const pack = dealGame(gameId);
+
   const ai = await mistralJson<{ payload: unknown }>(
     `You generate fun, PG-13 couple date game prompts. Reply JSON only: {"payload": ...}.
 Game rules:
@@ -29,9 +31,17 @@ Game rules:
     `Generate a fresh deal for game: ${gameId}`,
   );
 
-  if (ai?.payload) {
-    return NextResponse.json({ source: "mistral", payload: ai.payload });
+  if (ai.ok && ai.data?.payload) {
+    return NextResponse.json({
+      source: "mistral",
+      model: ai.model,
+      payload: ai.data.payload,
+    });
   }
 
-  return NextResponse.json({ source: "pack", payload: dealGame(gameId) });
+  return NextResponse.json({
+    source: "pack",
+    payload: pack,
+    aiError: ai.ok ? undefined : ai.error,
+  });
 }

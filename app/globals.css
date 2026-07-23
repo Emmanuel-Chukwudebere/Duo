@@ -3,6 +3,7 @@
 :root {
   --bg-midnight: #0a0b10;
   --bg-surface: #12141d;
+  --bg-elevated: #181b26;
   --bg-glass: rgba(255, 255, 255, 0.04);
   --accent-rose: #ff5a79;
   --accent-amber: #ffb35c;
@@ -28,9 +29,6 @@
 
 body {
   background-color: var(--bg-midnight);
-  background-image:
-    radial-gradient(circle at 25% 30%, rgba(255, 90, 121, 0.04) 0%, transparent 50%),
-    radial-gradient(circle at 75% 70%, rgba(138, 92, 245, 0.04) 0%, transparent 50%);
   color: var(--text-primary);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
   min-height: 100dvh;
@@ -38,21 +36,21 @@ body {
 
 .glass {
   background: var(--bg-glass);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--border-subtle);
 }
 
 .stage-surface {
   background: var(--bg-surface);
-  box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.45);
+  border: 1px solid var(--border-subtle);
 }
 
 .video-bubble {
   border-radius: 9999px;
   overflow: hidden;
-  border: 4px solid #12141d;
-  box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.35);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  background: #0a0b10;
   cursor: grab;
   user-select: none;
   touch-action: none;
@@ -63,19 +61,17 @@ body {
 }
 
 .video-bubble.speaking {
-  box-shadow:
-    0 0 0 4px #ff5a79,
-    0 20px 25px -5px rgb(0 0 0 / 0.35);
+  border-color: rgba(255, 90, 121, 0.7);
 }
 
 .mode-tab {
-  transition: all 0.25s cubic-bezier(0.23, 1, 0.32, 1);
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 .mode-tab.active {
-  background-color: #ff5a79;
-  color: white;
-  box-shadow: 0 10px 15px -3px rgb(255 90 121 / 0.35);
+  background-color: rgba(255, 90, 121, 0.15);
+  color: #ff5a79;
+  border: 1px solid rgba(255, 90, 121, 0.35);
 }
 
 .prompt-card {
@@ -97,27 +93,22 @@ body {
 
 .reaction-float {
   position: absolute;
-  font-size: 1.5rem;
-  animation: float-up 1.8s forwards;
+  animation: float-up 1.6s forwards;
   pointer-events: none;
   z-index: 50;
 }
 
 @keyframes float-up {
   0% {
-    transform: translateY(0) scale(0.6);
-    opacity: 0.9;
-  }
-  30% {
-    transform: translateY(-40px) scale(1.1);
+    transform: translateY(0) scale(0.85);
+    opacity: 0.95;
   }
   100% {
-    transform: translateY(-120px) scale(0.7);
+    transform: translateY(-100px) scale(1);
     opacity: 0;
   }
 }
 
-/* Hide scrollbar on dock while keeping scroll */
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
@@ -126,14 +117,36 @@ body {
   display: none;
 }
 
-/* Mobile-safe touch defaults */
 button,
 [role="button"] {
   touch-action: manipulation;
 }
 
-@media (max-width: 640px) {
-  .video-bubble {
-    border-width: 3px;
-  }
+.dock-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.9rem;
+  transition: background-color 0.15s ease, transform 0.15s ease;
+}
+.dock-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.dock-btn:active {
+  transform: scale(0.96);
+}
+
+.control-chip {
+  border-radius: 9999px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.03);
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.control-chip:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.control-chip[data-active="true"] {
+  border-color: rgba(255, 90, 121, 0.4);
+  background: rgba(255, 90, 121, 0.12);
+  color: #ff5a79;
 }

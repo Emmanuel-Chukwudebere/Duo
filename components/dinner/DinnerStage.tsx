@@ -1,11 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { Loader2, RefreshCw, Sparkles } from "lucide-react";
 import type { DinnerCard, DuoAppMessage } from "@/lib/types";
 import dinnerPack from "@/packs/dinner.json";
 import { toast } from "@/components/shell/Toast";
 import { YouTubePlayer } from "@/components/youtube/YouTubePlayer";
 import { YouTubeSearch } from "@/components/youtube/YouTubeSearch";
+import { TwoToneIcon } from "@/components/ui/TwoToneIcon";
 
 export function DinnerStage({
   sendApp,
@@ -37,6 +40,7 @@ export function DinnerStage({
     (dinnerPack as DinnerCard[]).slice(0, 3),
   );
   const [flipped, setFlipped] = useState<Record<string, boolean>>({});
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     return onAppMessage((msg) => {
@@ -57,6 +61,7 @@ export function DinnerStage({
   };
 
   const refresh = useCallback(async () => {
+    setLoading(true);
     try {
       const res = await fetch("/api/ai/dinner", {
         method: "POST",
@@ -64,18 +69,26 @@ export function DinnerStage({
         body: JSON.stringify({ tone: "cozy" }),
       });
       const data = await res.json();
-      if (data.cards) {
+      if (data.cards?.length) {
         setCards(data.cards);
         setFlipped({});
         sendApp({ type: "dinner.deal", cards: data.cards });
-        toast(
-          data.source === "mistral"
-            ? "Fresh prompts from AI"
-            : "Shuffled prompt pack",
-        );
+        if (data.source === "mistral") {
+          toast("Fresh AI prompts ready");
+        } else {
+          toast(
+            data.aiError
+              ? "AI offline — shuffled local pack"
+              : "Shuffled prompt pack",
+          );
+        }
+      } else {
+        toast("Could not refresh prompts");
       }
     } catch {
       toast("Could not refresh prompts");
+    } finally {
+      setLoading(false);
     }
   }, [sendApp]);
 
@@ -93,53 +106,73 @@ export function DinnerStage({
             Dinner &amp; Deep Talk
           </h2>
         </div>
-        <button
+        <motion.button
           type="button"
+          whileTap={{ scale: 0.97 }}
           onClick={refresh}
-          className="px-3 sm:px-4 py-2 text-xs sm:text-sm rounded-2xl glass hover:bg-white/10 min-h-[40px]"
+          disabled={loading}
+          className="control-chip px-3 sm:px-4 py-2 text-xs sm:text-sm min-h-[40px] inline-flex items-center gap-2 disabled:opacity-50"
         >
+          {loading ? (
+            <Loader2 className="w-4 h-4 animate-spin text-[#FF5A79]" />
+          ) : (
+            <TwoToneIcon icon={Sparkles} tone="rose" size={16} />
+          )}
           Fresh prompts
-        </button>
+        </motion.button>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4 flex-1 content-start sm:content-center">
-        {cards.map((card) => (
-          <button
-            key={card.id}
-            type="button"
-            onClick={() => flip(card.id)}
-            className="relative h-[180px] sm:h-[200px] w-full [perspective:1000px]"
-          >
-            <div
-              className={`prompt-card relative h-full w-full ${
-                flipped[card.id] ? "flipped" : ""
-              }`}
+        <AnimatePresence mode="popLayout">
+          {cards.map((card, i) => (
+            <motion.button
+              key={card.id}
+              type="button"
+              layout
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              transition={{ delay: i * 0.04, type: "spring", stiffness: 320, damping: 26 }}
+              whileHover={{ y: -2 }}
+              whileTap={{ scale: 0.99 }}
+              onClick={() => flip(card.id)}
+              className="relative h-[180px] sm:h-[200px] w-full [perspective:1000px] text-left"
             >
-              <div className="prompt-card-face absolute inset-0 glass rounded-3xl p-5 flex flex-col justify-between border border-white/10">
-                <div>
-                  <div className="text-[10px] tracking-[1px] text-[#FF5A79] font-medium">
-                    {kindLabel(card.kind)}
+              <div
+                className={`prompt-card relative h-full w-full ${
+                  flipped[card.id] ? "flipped" : ""
+                }`}
+              >
+                <div className="prompt-card-face absolute inset-0 rounded-3xl p-5 flex flex-col justify-between border border-white/10 bg-[#181B26]">
+                  <div>
+                    <div className="text-[10px] tracking-[1px] text-[#FF5A79] font-medium">
+                      {kindLabel(card.kind)}
+                    </div>
+                    <div className="mt-3 text-[15px] leading-snug font-medium">
+                      {card.front}
+                    </div>
                   </div>
-                  <div className="mt-3 text-[15px] leading-snug font-medium text-left">
-                    {card.front}
+                  <div className="text-[10px] text-[#9CA3AF] text-right flex items-center justify-end gap-1">
+                    <TwoToneIcon icon={RefreshCw} tone="muted" size={11} />
+                    Tap to flip
                   </div>
                 </div>
-                <div className="text-[10px] text-[#9CA3AF] text-right">
-                  Tap to flip
+                <div className="prompt-card-face prompt-card-back absolute inset-0 rounded-3xl p-5 flex flex-col justify-center border border-white/10 bg-[#12141D]">
+                  <div className="text-center text-sm text-[#9CA3AF]">
+                    {card.back}
+                  </div>
                 </div>
               </div>
-              <div className="prompt-card-face prompt-card-back absolute inset-0 glass rounded-3xl p-5 flex flex-col justify-center border border-white/10 bg-[#12141D]">
-                <div className="text-center text-sm text-[#9CA3AF]">
-                  {card.back}
-                </div>
-              </div>
-            </div>
-          </button>
-        ))}
+            </motion.button>
+          ))}
+        </AnimatePresence>
       </div>
 
-      <div className="glass rounded-3xl p-4 space-y-3">
-        <div className="flex items-center justify-between">
+      <motion.div
+        layout
+        className="rounded-3xl p-4 space-y-3 border border-white/10 bg-[#181B26]/80"
+      >
+        <div className="flex items-center justify-between gap-2">
           <div className="text-xs uppercase tracking-wider text-[#9CA3AF]">
             Soundtrack · YouTube
           </div>
@@ -168,7 +201,7 @@ export function DinnerStage({
             onYtEvent({ type: "yt.time", seconds, playing })
           }
         />
-      </div>
+      </motion.div>
     </div>
   );
 }

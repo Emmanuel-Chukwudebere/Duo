@@ -1,8 +1,11 @@
 "use client";
 
+import { motion } from "framer-motion";
+import { MonitorUp, Play, Square } from "lucide-react";
 import type { CinemaSource, DuoAppMessage } from "@/lib/types";
 import { YouTubePlayer } from "@/components/youtube/YouTubePlayer";
 import { YouTubeSearch } from "@/components/youtube/YouTubeSearch";
+import { TwoToneIcon } from "@/components/ui/TwoToneIcon";
 
 export function CinemaStage({
   cinemaSource,
@@ -63,43 +66,50 @@ export function CinemaStage({
         </div>
         <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
           <div className="flex bg-[#0A0B10] rounded-full p-0.5 sm:p-1 border border-white/10">
-            <button
+            <motion.button
               type="button"
+              whileTap={{ scale: 0.97 }}
               onClick={() => setCinemaSource("youtube")}
-              className={`px-2.5 sm:px-3 py-1.5 text-[11px] sm:text-xs rounded-full min-h-[36px] ${
+              className={`px-2.5 sm:px-3 py-1.5 text-[11px] sm:text-xs rounded-full min-h-[36px] inline-flex items-center gap-1.5 ${
                 cinemaSource === "youtube"
-                  ? "bg-[#FFB35C] text-black font-semibold"
-                  : "text-[#9CA3AF]"
+                  ? "bg-[#FFB35C]/15 text-[#FFB35C] border border-[#FFB35C]/35"
+                  : "text-[#9CA3AF] border border-transparent"
               }`}
             >
+              <TwoToneIcon
+                icon={Play}
+                tone={cinemaSource === "youtube" ? "amber" : "muted"}
+                size={14}
+              />
               YouTube
-            </button>
-            <button
+            </motion.button>
+            <motion.button
               type="button"
+              whileTap={{ scale: 0.97 }}
               onClick={() => setCinemaSource("screen")}
-              className={`px-2.5 sm:px-3 py-1.5 text-[11px] sm:text-xs rounded-full min-h-[36px] ${
+              className={`px-2.5 sm:px-3 py-1.5 text-[11px] sm:text-xs rounded-full min-h-[36px] inline-flex items-center gap-1.5 ${
                 cinemaSource === "screen"
-                  ? "bg-[#FFB35C] text-black font-semibold"
-                  : "text-[#9CA3AF]"
+                  ? "bg-[#FFB35C]/15 text-[#FFB35C] border border-[#FFB35C]/35"
+                  : "text-[#9CA3AF] border border-transparent"
               }`}
             >
+              <TwoToneIcon
+                icon={MonitorUp}
+                tone={cinemaSource === "screen" ? "amber" : "muted"}
+                size={14}
+              />
               Screen
-            </button>
+            </motion.button>
           </div>
-          {cinemaSource === "youtube" ? (
-            !isYtController ? (
-              <button
-                type="button"
-                onClick={takeYtControl}
-                className="px-2.5 sm:px-3 py-1.5 text-[11px] sm:text-xs rounded-full glass hover:bg-white/10 min-h-[36px]"
-              >
-                Take control
-              </button>
-            ) : (
-              <span className="text-[10px] text-[#9CA3AF] hidden sm:inline">
-                You control YT
-              </span>
-            )
+          {cinemaSource === "youtube" && !isYtController ? (
+            <motion.button
+              type="button"
+              whileTap={{ scale: 0.97 }}
+              onClick={takeYtControl}
+              className="control-chip px-2.5 sm:px-3 py-1.5 text-[11px] sm:text-xs min-h-[36px]"
+            >
+              Take control
+            </motion.button>
           ) : null}
         </div>
       </div>
@@ -126,7 +136,7 @@ export function CinemaStage({
           />
           <div className="text-[10px] text-[#9CA3AF] flex items-center gap-2 pb-1">
             <span
-              className="inline-block w-2 h-2 rounded-full"
+              className="inline-block w-1.5 h-1.5 rounded-full"
               style={{
                 background:
                   duckLevel < 0.9 ? "#FFB35C" : "rgba(255,255,255,0.2)",
@@ -146,30 +156,36 @@ export function CinemaStage({
           />
           {!screenActive ? (
             <div className="relative z-10 text-center space-y-3 p-4 sm:p-6 max-w-sm">
+              <div className="mx-auto w-12 h-12 rounded-2xl border border-white/10 bg-white/[0.03] flex items-center justify-center">
+                <TwoToneIcon icon={MonitorUp} tone="amber" size={24} />
+              </div>
               <p className="text-sm text-white/60">
-                Share a tab or window. Best on Chrome/Edge desktop (system
-                audio). Mobile browsers often block screen share.
+                Share a tab or window. Best on Chrome/Edge desktop. Mobile often
+                blocks screen share.
               </p>
-              <button
+              <motion.button
                 type="button"
+                whileTap={{ scale: 0.98 }}
                 onClick={startScreenShare}
-                className="px-5 py-3 rounded-full bg-[#FF5A79] text-sm font-semibold min-h-[44px] w-full sm:w-auto"
+                className="px-5 py-3 rounded-full bg-[#FF5A79] text-sm font-semibold min-h-[44px] w-full sm:w-auto border border-[#FF5A79]/40"
               >
                 Start sharing
-              </button>
+              </motion.button>
             </div>
           ) : (
             <div className="absolute top-3 right-3 z-10 flex gap-2">
               {sharing ? (
-                <button
+                <motion.button
                   type="button"
+                  whileTap={{ scale: 0.97 }}
                   onClick={stopScreenShare}
-                  className="px-3 py-2 rounded-full bg-red-500/90 text-xs font-semibold min-h-[36px]"
+                  className="px-3 py-2 rounded-full bg-red-500/15 border border-red-400/40 text-red-300 text-xs font-semibold min-h-[36px] inline-flex items-center gap-1.5"
                 >
+                  <TwoToneIcon icon={Square} tone="rose" size={12} />
                   Stop share
-                </button>
+                </motion.button>
               ) : (
-                <span className="px-3 py-1.5 rounded-full bg-black/60 text-[10px] text-white/80 glass">
+                <span className="px-3 py-1.5 rounded-full bg-black/70 border border-white/10 text-[10px] text-white/80">
                   Live from partner
                 </span>
               )}
