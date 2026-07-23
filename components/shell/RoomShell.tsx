@@ -393,7 +393,7 @@ export function RoomShell({ code }: { code: string }) {
                 exit={{ opacity: 0, y: 10 }}
                 className="absolute left-1/2 -translate-x-1/2 z-20 w-[min(100%-1.5rem,26rem)] bottom-[7rem] sm:bottom-[8.5rem]"
               >
-                <div className="glass rounded-2xl border border-white/12 px-4 py-3 shadow-xl">
+                <div className="rounded-2xl border border-white/12 bg-[#181B26] px-4 py-3 shadow-2xl ring-1 ring-black/40">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="relative flex h-2 w-2">
                       <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400/70" />
