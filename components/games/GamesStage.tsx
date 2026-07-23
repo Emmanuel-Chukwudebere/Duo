@@ -468,24 +468,41 @@ export function GamesStage({
                         <p className="text-xs uppercase tracking-[0.14em] text-[#9CA3AF]">
                           Would you rather
                         </p>
-                        <div className="flex-1 flex flex-col justify-center gap-6">
-                          <div className="space-y-2">
+                        <div className="flex-1 flex flex-col justify-center gap-3">
+                          <button
+                            type="button"
+                            disabled={Boolean(myPick)}
+                            onClick={() => pickWyr("a")}
+                            className={`group text-left space-y-2 rounded-2xl border p-4 transition-colors disabled:cursor-default ${
+                              myPick === "a"
+                                ? "border-rose-400/50 bg-rose-400/10"
+                                : "border-white/10 bg-white/[0.02] enabled:hover:border-rose-400/40 enabled:hover:bg-rose-400/[0.06]"
+                            }`}
+                          >
                             <span className="text-[10px] font-bold text-rose-300/90 tracking-wider">
-                              A · SWIPE LEFT
+                              A · TAP OR SWIPE LEFT
                             </span>
                             <p className="text-lg sm:text-xl font-medium leading-snug">
                               {String(payload.a ?? "")}
                             </p>
-                          </div>
-                          <div className="h-px bg-white/10" />
-                          <div className="space-y-2">
+                          </button>
+                          <button
+                            type="button"
+                            disabled={Boolean(myPick)}
+                            onClick={() => pickWyr("b")}
+                            className={`group text-left space-y-2 rounded-2xl border p-4 transition-colors disabled:cursor-default ${
+                              myPick === "b"
+                                ? "border-emerald-400/50 bg-emerald-400/10"
+                                : "border-white/10 bg-white/[0.02] enabled:hover:border-emerald-400/40 enabled:hover:bg-emerald-400/[0.06]"
+                            }`}
+                          >
                             <span className="text-[10px] font-bold text-emerald-300/90 tracking-wider">
-                              B · SWIPE RIGHT
+                              B · TAP OR SWIPE RIGHT
                             </span>
                             <p className="text-lg sm:text-xl font-medium leading-snug">
                               {String(payload.b ?? "")}
                             </p>
-                          </div>
+                          </button>
                         </div>
                         <p className="text-center text-[11px] text-[#9CA3AF]">
                           {myPick

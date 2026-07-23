@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { MonitorUp, Play, Square } from "lucide-react";
+import { Maximize2, MonitorUp, Play, Square } from "lucide-react";
 import type { CinemaSource, DuoAppMessage } from "@/lib/types";
 import { YouTubePlayer } from "@/components/youtube/YouTubePlayer";
 import { YouTubeSearch } from "@/components/youtube/YouTubeSearch";
@@ -57,6 +57,31 @@ export function CinemaStage({
 }) {
   const screenActive = sharing || remoteSharing;
   const localVideoEl = useRef<HTMLVideoElement | null>(null);
+
+  // Let a mobile viewer blow the partner's shared screen up to fullscreen (and
+  // rotate to landscape where supported) — small inline video is unwatchable.
+  async function enterFullscreen() {
+    const node = localVideoEl.current;
+    if (!node) return;
+    try {
+      type IosVideo = HTMLVideoElement & {
+        webkitEnterFullscreen?: () => void;
+      };
+      const el = node as IosVideo;
+      if (node.requestFullscreen) {
+        await node.requestFullscreen();
+      } else if (el.webkitEnterFullscreen) {
+        // iOS Safari only fullscreens the <video> element itself.
+        el.webkitEnterFullscreen();
+      }
+      const orientation = screen.orientation as ScreenOrientation & {
+        lock?: (o: string) => Promise<void>;
+      };
+      await orientation?.lock?.("landscape").catch(() => undefined);
+    } catch {
+      /* fullscreen/orientation not permitted — ignore */
+    }
+  }
 
   // Merge callback ref + external ref so we can re-bind when the element mounts
   function setScreenVideoNode(node: HTMLVideoElement | null) {
@@ -270,9 +295,21 @@ export function CinemaStage({
                     Stop share
                   </motion.button>
                 ) : (
-                  <span className="px-3 py-1.5 rounded-full bg-black/70 border border-white/10 text-[10px] text-white/80">
-                    Live from partner
-                  </span>
+                  <>
+                    <motion.button
+                      type="button"
+                      whileTap={{ scale: 0.97 }}
+                      onClick={() => void enterFullscreen()}
+                      className="px-3 py-2 rounded-full bg-black/70 border border-white/15 text-white text-xs font-semibold min-h-[36px] inline-flex items-center gap-1.5 hover:bg-black/85"
+                      aria-label="Fullscreen"
+                    >
+                      <Maximize2 className="w-3.5 h-3.5" />
+                      Fullscreen
+                    </motion.button>
+                    <span className="hidden sm:inline px-3 py-1.5 rounded-full bg-black/70 border border-white/10 text-[10px] text-white/80">
+                      Live from partner
+                    </span>
+                  </>
                 )}
               </div>
               {sharing ? (

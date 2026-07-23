@@ -383,6 +383,52 @@ export function RoomShell({ code }: { code: string }) {
             </AnimatePresence>
           </div>
 
+          {/* Invite affordance — prominent while you're alone, so it's obvious
+              how to bring your partner in (was buried in tiny header chips). */}
+          <AnimatePresence>
+            {!state.partnerPresent ? (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                className="absolute left-1/2 -translate-x-1/2 z-20 w-[min(100%-1.5rem,26rem)] bottom-[7rem] sm:bottom-[8.5rem]"
+              >
+                <div className="glass rounded-2xl border border-white/12 px-4 py-3 shadow-xl">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="relative flex h-2 w-2">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400/70" />
+                      <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-400" />
+                    </span>
+                    <p className="text-sm font-semibold">Invite your partner</p>
+                  </div>
+                  <p className="text-xs text-[#9CA3AF] mb-2.5">
+                    Share this link or code — the date starts when they join.
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={copyLink}
+                      className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-full bg-[#FF5A79] text-white text-xs font-semibold py-2.5 min-h-[40px] hover:bg-[#FF5A79]/90 transition-colors"
+                    >
+                      <Copy size={14} /> Copy invite link
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowQrModal(true)}
+                      className="inline-flex items-center justify-center gap-1.5 rounded-full border border-white/12 bg-white/[0.04] text-[#8A5CF5] text-xs font-semibold px-3 py-2.5 min-h-[40px] hover:bg-white/[0.08] transition-colors"
+                      aria-label="Show QR code"
+                    >
+                      <QrCode size={14} /> QR
+                    </button>
+                  </div>
+                  <p className="mt-2 text-center text-[11px] text-[#9CA3AF]/70">
+                    Room code <span className="font-mono text-white/90">{code}</span>
+                  </p>
+                </div>
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
+
           {/* Drag cam bubbles anywhere inside the stage */}
           <DraggableBubble
             dragConstraintsRef={stageConstraintsRef}
