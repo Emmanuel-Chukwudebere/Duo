@@ -44,11 +44,12 @@ Keep front under 140 characters. Warm, intimate, not corporate.`,
   });
 }
 
-/** Health check for AI key presence (never leaks the key). */
+/** Health check — packs always work; AI uses key when present. */
 export async function GET() {
   const hasKey = Boolean(process.env.MISTRAL_API_KEY?.trim());
   return NextResponse.json({
-    configured: hasKey,
-    models: hasKey ? "ready" : "missing MISTRAL_API_KEY",
+    configured: true,
+    aiKey: hasKey,
+    models: hasKey ? "ready" : "pack-fallback",
   });
 }
