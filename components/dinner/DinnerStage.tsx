@@ -182,6 +182,7 @@ export function DinnerStage({
         </div>
         {isYtController ? (
           <YouTubeSearch
+            activeVideoId={ytVideoId}
             onPick={(id, title) => {
               onLoadYoutube(id, title);
               toast(title ? `Playing · ${title}` : "Playing in Dinner…");
@@ -209,7 +210,7 @@ export function DinnerStage({
         />
         {ytVideoId && isYtController ? (
           <p className="text-[10px] text-[#9CA3AF]">
-            If audio is silent, tap the play button on the player.
+            Search again anytime · tap play on the player if silent
           </p>
         ) : null}
       </div>

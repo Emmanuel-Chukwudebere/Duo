@@ -191,7 +191,7 @@ export function CinemaStage({
       {cinemaSource === "youtube" ? (
         <div className="flex-1 flex flex-col gap-2 sm:gap-3 min-h-0 overflow-y-auto">
           {isYtController ? (
-            <YouTubeSearch onPick={onLoadYoutube} />
+            <YouTubeSearch activeVideoId={ytVideoId} onPick={onLoadYoutube} />
           ) : (
             <p className="text-xs text-[#9CA3AF]">
               Watching with partner control. Take control to search.

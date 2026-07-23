@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Camera,
@@ -28,6 +28,7 @@ import { CinemaStage } from "@/components/cinema/CinemaStage";
 import { ToastHost, toast } from "@/components/shell/Toast";
 import { TwoToneIcon } from "@/components/ui/TwoToneIcon";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { DraggableBubble } from "@/components/shell/DraggableBubble";
 
 const MODES: {
   id: StageMode;
@@ -63,9 +64,10 @@ export function RoomShell({ code }: { code: string }) {
     videoId?: string;
   } | null>(null);
   const [bubblesCollapsed, setBubblesCollapsed] = useState(false);
+  const stageConstraintsRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    // Auto-shrink bubbles in cinema so they don't cover the movie
+    // Auto-shrink bubbles in cinema so they cover less of the movie
     setBubblesCollapsed(state.mode === "cinema");
   }, [state.mode]);
 
@@ -164,14 +166,11 @@ export function RoomShell({ code }: { code: string }) {
     : "w-[72px] h-[72px] sm:w-[100px] sm:h-[100px] md:w-[112px] md:h-[112px]";
 
   return (
-    <div className="min-h-dvh flex flex-col bg-[#0A0B10]">
+    <div className="h-dvh max-h-dvh flex flex-col overflow-hidden bg-[#0A0B10]">
       <ToastHost />
 
-      {/*
-        Sticky header sits in normal flow (doesn't cover first paint).
-        scroll-mt on main content keeps anchors clear.
-      */}
-      <header className="sticky top-0 z-50 border-b border-white/[0.06] bg-[#0A0B10]/95 backdrop-blur-md pt-[env(safe-area-inset-top)]">
+      {/* Fixed-height chrome — never pushed by stage growth */}
+      <header className="shrink-0 z-50 border-b border-white/[0.06] bg-[#0A0B10] pt-[env(safe-area-inset-top)]">
         <div className="mx-auto max-w-[1280px] px-3 sm:px-6 md:px-8 py-2 space-y-2">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
@@ -240,9 +239,12 @@ export function RoomShell({ code }: { code: string }) {
         </div>
       </header>
 
-      {/* Scrollable main — clears sticky header + fixed dock */}
-      <main className="flex-1 w-full max-w-[1280px] mx-auto px-3 sm:px-6 md:px-8 pt-3 sm:pt-4 pb-[calc(6.5rem+env(safe-area-inset-bottom))] sm:pb-32">
-        <div className="flex items-start sm:items-center justify-between gap-2 mb-3 px-0.5">
+      {/*
+        Main fills remaining viewport under header.
+        Title bar is shrink-0; stage flex-1 fills the rest — never pushes header.
+      */}
+      <main className="flex-1 min-h-0 flex flex-col w-full max-w-[1280px] mx-auto px-3 sm:px-6 md:px-8 pt-2 sm:pt-3 pb-[calc(5.25rem+env(safe-area-inset-bottom))] sm:pb-[5.75rem]">
+        <div className="flex items-start sm:items-center justify-between gap-2 mb-2 sm:mb-3 px-0.5 shrink-0">
           <div className="min-w-0 flex-1">
             <AnimatePresence mode="wait">
               <motion.h1
@@ -251,13 +253,13 @@ export function RoomShell({ code }: { code: string }) {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -4 }}
                 transition={{ duration: 0.2 }}
-                className="text-xl sm:text-2xl md:text-3xl font-semibold tracking-tighter truncate"
+                className="text-lg sm:text-2xl md:text-3xl font-semibold tracking-tighter truncate"
               >
                 {title}
               </motion.h1>
             </AnimatePresence>
             <p
-              className={`text-xs sm:text-sm line-clamp-2 mt-0.5 ${
+              className={`text-xs sm:text-sm line-clamp-1 mt-0.5 ${
                 connected
                   ? "text-emerald-400/90"
                   : state.partnerPresent
@@ -282,22 +284,13 @@ export function RoomShell({ code }: { code: string }) {
           </div>
         </div>
 
-        {/* Stage: cinema gets extra bottom pad so bubbles never sit on the film */}
+        {/* Stage fills all leftover height */}
         <div
           id="stage-area"
-          className={`stage-surface relative w-full rounded-2xl sm:rounded-3xl border border-white/10 ${
-            state.mode === "cinema"
-              ? "min-h-[min(70dvh,640px)] overflow-hidden"
-              : "min-h-[min(62dvh,560px)] overflow-hidden"
-          }`}
+          ref={stageConstraintsRef}
+          className="stage-surface relative flex-1 min-h-0 w-full rounded-2xl sm:rounded-3xl border border-white/10 overflow-hidden"
         >
-          <div
-            className={`absolute inset-0 ${
-              state.mode === "cinema"
-                ? "pb-20 sm:pb-24"
-                : "pb-16 sm:pb-20"
-            }`}
-          >
+          <div className="absolute inset-0">
             <AnimatePresence mode="wait">
               <motion.div
                 key={state.mode}
@@ -353,42 +346,44 @@ export function RoomShell({ code }: { code: string }) {
             </AnimatePresence>
           </div>
 
-          {/* PiP bubbles — LEFT side in cinema so movie stays clear; collapsible */}
-          <div
-            className={`absolute z-30 flex gap-2 ${
+          {/* Drag cam bubbles anywhere inside the stage */}
+          <DraggableBubble
+            dragConstraintsRef={stageConstraintsRef}
+            className={`${bubbleSize} ${
               state.mode === "cinema"
-                ? "bottom-3 left-3 flex-row"
-                : "bottom-3 right-3 flex-row-reverse"
+                ? "bottom-3 left-3"
+                : "bottom-3 right-[5.25rem] sm:right-[6.5rem]"
             }`}
+            style={{ opacity: state.camOn ? 1 : 0.45 }}
           >
-            <button
-              type="button"
-              onClick={() => setBubblesCollapsed((c) => !c)}
-              className="absolute -top-6 left-0 text-[10px] text-[#9CA3AF] hover:text-white hidden sm:block"
-            >
-              {bubblesCollapsed ? "Expand cams" : "Shrink cams"}
-            </button>
-
             <div
-              className={`video-bubble relative ${bubbleSize} ${
+              className={`video-bubble w-full h-full ${
                 state.localSpeaking ? "speaking" : ""
               }`}
-              style={{ opacity: state.camOn ? 1 : 0.45 }}
             >
               <video
                 ref={room.localVideoRef}
                 autoPlay
                 muted
                 playsInline
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover pointer-events-none"
               />
-              <div className="absolute bottom-0.5 inset-x-0 text-center text-[7px] sm:text-[9px] tracking-widest text-white/70">
+              <div className="absolute bottom-0.5 inset-x-0 text-center text-[7px] sm:text-[9px] tracking-widest text-white/70 pointer-events-none">
                 YOU
               </div>
             </div>
+          </DraggableBubble>
 
+          <DraggableBubble
+            dragConstraintsRef={stageConstraintsRef}
+            className={`${bubbleSize} ${
+              state.mode === "cinema"
+                ? "bottom-3 left-[4.75rem] sm:left-[5.25rem]"
+                : "bottom-3 right-3"
+            }`}
+          >
             <div
-              className={`video-bubble relative ${bubbleSize} ${
+              className={`video-bubble w-full h-full ${
                 state.remoteSpeaking ? "speaking" : ""
               }`}
             >
@@ -396,20 +391,20 @@ export function RoomShell({ code }: { code: string }) {
                 ref={room.remoteVideoRef}
                 autoPlay
                 playsInline
-                className="w-full h-full object-cover bg-[#0A0B10]"
+                className="w-full h-full object-cover bg-[#0A0B10] pointer-events-none"
               />
               {!state.partnerPresent || !connected ? (
-                <div className="absolute inset-0 flex items-center justify-center bg-[#12141D]/80">
+                <div className="absolute inset-0 flex items-center justify-center bg-[#12141D]/80 pointer-events-none">
                   <span className="text-[8px] text-white/40 tracking-wider">
                     {state.partnerPresent ? "…" : "—"}
                   </span>
                 </div>
               ) : null}
-              <div className="absolute bottom-0.5 inset-x-0 text-center text-[7px] sm:text-[9px] tracking-widest text-white/70">
+              <div className="absolute bottom-0.5 inset-x-0 text-center text-[7px] sm:text-[9px] tracking-widest text-white/70 pointer-events-none">
                 {connected ? "PARTNER" : "…"}
               </div>
             </div>
-          </div>
+          </DraggableBubble>
 
           {reactions.map((r) => {
             const meta = REACTIONS.find((x) => x.id === r.kind) || REACTIONS[0]!;
