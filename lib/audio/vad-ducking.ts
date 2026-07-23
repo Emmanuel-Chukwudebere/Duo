@@ -5,6 +5,7 @@ const SPEECH_HOLD_MS = 80;
 const SILENCE_RESTORE_MS = 1200;
 const DUCK_LEVEL = 0.25;
 const FULL_LEVEL = 1;
+const MANUAL_DUCK_MS = 2200;
 
 /**
  * Lightweight VAD using AnalyserNode RMS on a mic MediaStream.
@@ -19,13 +20,17 @@ export class VadDuckingEngine {
   private silenceSince: number | null = null;
   private ducked = false;
   private remoteSpeaking = false;
-  private enabled = true;
+  /** Auto VAD on/off — manual Talk still works when auto is off */
+  private autoEnabled = true;
+  /** Manual Talk lock — VAD loop won't restore until this expires */
+  private manualUntil = 0;
+  private manualTimer: ReturnType<typeof setTimeout> | null = null;
   private listeners = new Set<DuckingListener>();
   private level = FULL_LEVEL;
 
   setEnabled(on: boolean) {
-    this.enabled = on;
-    if (!on) {
+    this.autoEnabled = on;
+    if (!on && performance.now() >= this.manualUntil) {
       this.ducked = false;
       this.setLevel(FULL_LEVEL, false);
     }
@@ -35,14 +40,32 @@ export class VadDuckingEngine {
     this.remoteSpeaking = active;
   }
 
-  forceDuck() {
-    if (!this.enabled) return;
+  /**
+   * Manual "Talk" — always ducks media for ~2s, even if AUTO duck is off.
+   * Returns true if applied.
+   */
+  forceDuck(ms = MANUAL_DUCK_MS): boolean {
+    if (this.manualTimer) {
+      clearTimeout(this.manualTimer);
+      this.manualTimer = null;
+    }
+    this.manualUntil = performance.now() + ms;
     this.ducked = true;
-    this.setLevel(DUCK_LEVEL, true);
-    window.setTimeout(() => {
+    this.animateTo(DUCK_LEVEL, 120, true);
+
+    this.manualTimer = setTimeout(() => {
+      this.manualTimer = null;
+      this.manualUntil = 0;
       this.ducked = false;
-      this.setLevel(FULL_LEVEL, false);
-    }, 1850);
+      this.animateTo(FULL_LEVEL, 350, false);
+    }, ms);
+
+    return true;
+  }
+
+  /** Imperative duck level for UI without mic (still works). */
+  getLevel() {
+    return this.level;
   }
 
   subscribe(fn: DuckingListener) {
@@ -52,7 +75,7 @@ export class VadDuckingEngine {
   }
 
   async attachMic(stream: MediaStream) {
-    this.detach();
+    this.detach(false);
     const Ctx =
       window.AudioContext ||
       (window as unknown as { webkitAudioContext: typeof AudioContext })
@@ -66,9 +89,13 @@ export class VadDuckingEngine {
     this.loop();
   }
 
-  detach() {
+  detach(clearListeners = true) {
     if (this.raf) cancelAnimationFrame(this.raf);
     this.raf = 0;
+    if (this.manualTimer) {
+      clearTimeout(this.manualTimer);
+      this.manualTimer = null;
+    }
     try {
       this.source?.disconnect();
     } catch {
@@ -78,11 +105,16 @@ export class VadDuckingEngine {
     this.ctx = null;
     this.analyser = null;
     this.source = null;
+    if (clearListeners) this.listeners.clear();
   }
 
   private loop = () => {
     this.raf = requestAnimationFrame(this.loop);
-    if (!this.analyser || !this.enabled) return;
+
+    // Manual Talk lock — don't let VAD restore early
+    if (performance.now() < this.manualUntil) return;
+
+    if (!this.analyser || !this.autoEnabled) return;
 
     const data = new Uint8Array(this.analyser.frequencyBinCount);
     this.analyser.getByteTimeDomainData(data);

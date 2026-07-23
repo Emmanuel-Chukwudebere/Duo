@@ -16,7 +16,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import type { DuoAppMessage, GameId } from "@/lib/types";
-import { dealGame, GAME_META } from "@/lib/games/engine";
+import { dealGame, GAME_META, normalizeDeal } from "@/lib/games/engine";
 import { toast } from "@/components/shell/Toast";
 import { TwoToneIcon } from "@/components/ui/TwoToneIcon";
 import { CardStack, type StackItem } from "./CardStack";
@@ -62,7 +62,7 @@ export function GamesStage({
     return onAppMessage((msg) => {
       if (msg.type === "game.start") {
         setActive(msg.gameId);
-        setPayload(msg.payload as Record<string, unknown>);
+        setPayload(normalizeDeal(msg.gameId, msg.payload));
         setMyPick(null);
         setTheirPick(null);
         setInput("");
@@ -106,7 +106,7 @@ export function GamesStage({
   const startGame = useCallback(
     async (gameId: GameId, useAi: boolean) => {
       setDealing(true);
-      let nextPayload: unknown = dealGame(gameId);
+      let nextPayload: Record<string, unknown> = dealGame(gameId);
       if (useAi) {
         try {
           const res = await fetch("/api/ai/deal", {
@@ -115,7 +115,9 @@ export function GamesStage({
             body: JSON.stringify({ gameId }),
           });
           const data = await res.json();
-          if (data.payload) nextPayload = data.payload;
+          if (data.payload) {
+            nextPayload = normalizeDeal(gameId, data.payload);
+          }
           toast(
             data.source === "mistral"
               ? "AI dealt a fresh round"
@@ -127,8 +129,10 @@ export function GamesStage({
           toast("Using local pack");
         }
       }
+      // Guarantee WYR never lands empty
+      nextPayload = normalizeDeal(gameId, nextPayload);
       setActive(gameId);
-      setPayload(nextPayload as Record<string, unknown>);
+      setPayload(nextPayload);
       setMyPick(null);
       setTheirPick(null);
       setRecommend(null);

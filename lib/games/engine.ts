@@ -10,7 +10,75 @@ function randomLetter(): string {
   return letters[Math.floor(Math.random() * letters.length)]!;
 }
 
-export function dealGame(gameId: GameId): unknown {
+/** Normalize AI / pack payloads so UI always gets expected keys. */
+export function normalizeDeal(
+  gameId: GameId,
+  raw: unknown,
+): Record<string, unknown> {
+  const fallback = dealGameRaw(gameId) as Record<string, unknown>;
+  if (!raw || typeof raw !== "object") return fallback;
+  const o = raw as Record<string, unknown>;
+
+  if (gameId === "wyr") {
+    // Accept a/b, A/B, optionA/optionB, options: [a,b]
+    let a =
+      o.a ??
+      o.A ??
+      o.optionA ??
+      o.option_a ??
+      (Array.isArray(o.options) ? (o.options as unknown[])[0] : undefined);
+    let b =
+      o.b ??
+      o.B ??
+      o.optionB ??
+      o.option_b ??
+      (Array.isArray(o.options) ? (o.options as unknown[])[1] : undefined);
+    // Nested payload
+    if ((!a || !b) && o.payload && typeof o.payload === "object") {
+      return normalizeDeal(gameId, o.payload);
+    }
+    a = typeof a === "string" && a.trim() ? a.trim() : fallback.a;
+    b = typeof b === "string" && b.trim() ? b.trim() : fallback.b;
+    return { a, b };
+  }
+
+  if (gameId === "word-association") {
+    const seed =
+      (typeof o.seed === "string" && o.seed) ||
+      (typeof o.word === "string" && o.word) ||
+      fallback.seed;
+    const chain = Array.isArray(o.chain) ? o.chain : [];
+    return { seed, chain };
+  }
+
+  if (gameId === "starts-with") {
+    return {
+      letter: String(o.letter || fallback.letter).slice(0, 1).toUpperCase(),
+      category: String(o.category || fallback.category),
+      used: Array.isArray(o.used) ? o.used : [],
+    };
+  }
+
+  if (gameId === "start-end") {
+    return {
+      start: String(o.start || fallback.start).slice(0, 1).toUpperCase(),
+      end: String(o.end || fallback.end).slice(0, 1).toUpperCase(),
+      used: Array.isArray(o.used) ? o.used : [],
+    };
+  }
+
+  if (gameId === "places") {
+    return {
+      letter: String(o.letter || fallback.letter).slice(0, 1).toUpperCase(),
+      hint: String(o.hint || fallback.hint),
+      used: Array.isArray(o.used) ? o.used : [],
+    };
+  }
+
+  return { ...fallback, ...o };
+}
+
+function dealGameRaw(gameId: GameId): unknown {
   switch (gameId) {
     case "wyr": {
       const p = pick(packs.wyr);
@@ -27,7 +95,6 @@ export function dealGame(gameId: GameId): unknown {
     case "start-end": {
       let start = randomLetter();
       let end = randomLetter();
-      // Avoid pathological pairs a bit
       if (start === end) end = randomLetter();
       return { start, end, used: [] as string[] };
     }
@@ -40,6 +107,10 @@ export function dealGame(gameId: GameId): unknown {
     default:
       return {};
   }
+}
+
+export function dealGame(gameId: GameId): Record<string, unknown> {
+  return normalizeDeal(gameId, dealGameRaw(gameId));
 }
 
 export const GAME_META: Record<

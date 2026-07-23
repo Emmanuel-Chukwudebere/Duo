@@ -27,6 +27,7 @@ import { GamesStage } from "@/components/games/GamesStage";
 import { CinemaStage } from "@/components/cinema/CinemaStage";
 import { ToastHost, toast } from "@/components/shell/Toast";
 import { TwoToneIcon } from "@/components/ui/TwoToneIcon";
+import { Tooltip } from "@/components/ui/Tooltip";
 
 const MODES: {
   id: StageMode;
@@ -146,17 +147,22 @@ export function RoomShell({ code }: { code: string }) {
         ? "Playful Games"
         : "Cinema Stage";
 
+  const connected =
+    state.connection === "connected" ||
+    state.status.toLowerCase().includes("connected");
+
   return (
-    <div className="min-h-dvh flex flex-col pb-[calc(5.5rem+env(safe-area-inset-bottom))] pt-[calc(5rem+env(safe-area-inset-top))] sm:pt-20 sm:pb-28 px-3 sm:px-6 md:px-8 max-w-[1280px] mx-auto">
+    <div className="min-h-dvh flex flex-col pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:pb-28 px-3 sm:px-6 md:px-8 max-w-[1280px] mx-auto">
       <ToastHost />
 
-      <div className="fixed top-[max(0.5rem,env(safe-area-inset-top))] left-1/2 -translate-x-1/2 z-50 w-[min(100%-0.75rem,960px)]">
+      {/* Sticky (not fixed overlay) so content never crops under the nav */}
+      <header className="sticky top-0 z-50 -mx-3 sm:-mx-6 md:-mx-8 px-3 sm:px-6 md:px-8 pt-[max(0.5rem,env(safe-area-inset-top))] pb-2 bg-[#0A0B10]/90 backdrop-blur-md">
         <motion.div
           layout
-          className="glass rounded-2xl sm:rounded-full flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2 px-2 py-2 sm:justify-between border border-white/10"
+          className="glass rounded-2xl flex flex-col gap-2 px-2 py-2 border border-white/10 max-w-[960px] mx-auto"
         >
-          <div className="flex items-center justify-between gap-2 sm:contents">
-            <div className="flex items-center gap-2 pl-2 sm:pl-3 pr-1">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 pl-2 min-w-0">
               <div className="w-8 h-8 rounded-xl bg-[#FF5A79]/12 border border-[#FF5A79]/25 flex items-center justify-center shrink-0">
                 <TwoToneIcon icon={Heart} tone="rose" size={16} />
               </div>
@@ -165,28 +171,34 @@ export function RoomShell({ code }: { code: string }) {
               </span>
             </div>
 
-            <div className="flex items-center gap-1.5 pr-1 sm:order-last sm:pr-2">
+            <div className="flex items-center gap-1.5 pr-1 shrink-0">
               <div className="px-2 sm:px-3 py-1 bg-[#0A0B10] rounded-full flex items-center gap-1.5 text-[10px] sm:text-xs border border-white/8">
                 <span
                   className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                    state.partnerPresent ? "bg-emerald-400" : "bg-white/25"
+                    connected
+                      ? "bg-emerald-400"
+                      : state.partnerPresent
+                        ? "bg-amber-400"
+                        : "bg-white/25"
                   }`}
                 />
                 <span className="font-mono text-[#9CA3AF]">{code}</span>
               </div>
-              <motion.button
-                type="button"
-                whileTap={{ scale: 0.96 }}
-                onClick={copyLink}
-                className="control-chip px-2.5 sm:px-3 py-1.5 text-[11px] sm:text-sm font-medium min-h-[36px] inline-flex items-center gap-1.5 text-[#FF5A79]"
-              >
-                <TwoToneIcon icon={Copy} tone="rose" size={14} />
-                <span className="hidden xs:inline sm:inline">Copy</span>
-              </motion.button>
+              <Tooltip label="Copy room invite link">
+                <motion.button
+                  type="button"
+                  whileTap={{ scale: 0.96 }}
+                  onClick={copyLink}
+                  className="control-chip px-2.5 sm:px-3 py-1.5 text-[11px] sm:text-sm font-medium min-h-[36px] inline-flex items-center gap-1.5 text-[#FF5A79]"
+                >
+                  <TwoToneIcon icon={Copy} tone="rose" size={14} />
+                  <span className="hidden sm:inline">Copy</span>
+                </motion.button>
+              </Tooltip>
             </div>
           </div>
 
-          <div className="flex items-center justify-center bg-[#0A0B10] rounded-full p-1 w-full sm:w-auto border border-white/6">
+          <div className="flex items-center justify-center bg-[#0A0B10] rounded-full p-1 w-full border border-white/6">
             {MODES.map((m) => {
               const active = state.mode === m.id;
               return (
@@ -212,10 +224,10 @@ export function RoomShell({ code }: { code: string }) {
             })}
           </div>
         </motion.div>
-      </div>
+      </header>
 
-      <div className="flex items-start sm:items-center justify-between gap-2 mb-2 sm:mb-3 px-0.5">
-        <div className="min-w-0">
+      <div className="flex items-start sm:items-center justify-between gap-2 mb-2 sm:mb-3 mt-1 px-0.5">
+        <div className="min-w-0 flex-1">
           <AnimatePresence mode="wait">
             <motion.h1
               key={state.mode}
@@ -228,14 +240,25 @@ export function RoomShell({ code }: { code: string }) {
               {title}
             </motion.h1>
           </AnimatePresence>
-          <p className="text-[#9CA3AF] text-xs sm:text-sm line-clamp-2 mt-0.5">
+          <p
+            className={`text-xs sm:text-sm line-clamp-2 mt-0.5 ${
+              connected
+                ? "text-emerald-400/90"
+                : state.partnerPresent
+                  ? "text-amber-300/90"
+                  : "text-[#9CA3AF]"
+            }`}
+          >
             {state.status}
           </p>
         </div>
         <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs shrink-0">
-          <div className="px-2 sm:px-3 py-1 rounded-full glass max-w-[7rem] sm:max-w-none truncate border border-white/8">
-            You
-            {state.partnerPresent ? ` + partner` : ""}
+          <div className="px-2 sm:px-3 py-1 rounded-full glass truncate border border-white/8">
+            {state.partnerPresent
+              ? connected
+                ? "You + partner"
+                : "Partner joining…"
+              : "Just you"}
           </div>
           <div className="px-2 sm:px-3 py-1 rounded-full glass text-[#9CA3AF] tabular-nums border border-white/8">
             {timer}
@@ -325,10 +348,18 @@ export function RoomShell({ code }: { code: string }) {
             ref={room.remoteVideoRef}
             autoPlay
             playsInline
-            className="w-full h-full object-cover"
+            // Not muted — partner audio comes through this element
+            className="w-full h-full object-cover bg-[#0A0B10]"
           />
+          {!state.partnerPresent || !connected ? (
+            <div className="absolute inset-0 flex items-center justify-center bg-[#12141D]/80">
+              <span className="text-[9px] sm:text-[10px] text-white/40 tracking-wider px-2 text-center">
+                {state.partnerPresent ? "…" : "WAIT"}
+              </span>
+            </div>
+          ) : null}
           <div className="absolute bottom-1 sm:bottom-2 inset-x-0 text-center text-[8px] sm:text-[10px] tracking-widest text-white/70">
-            {state.partnerPresent ? "PARTNER" : "…"}
+            {connected ? "PARTNER" : state.partnerPresent ? "LINKING" : "…"}
           </div>
         </motion.div>
 
@@ -346,96 +377,156 @@ export function RoomShell({ code }: { code: string }) {
         })}
       </div>
 
+      {/* Duck level chip when talking */}
+      {state.localSpeaking || room.duckLevel < 0.95 ? (
+        <div className="fixed bottom-[4.75rem] left-1/2 -translate-x-1/2 z-40 pointer-events-none hidden sm:block">
+          <div className="rounded-full border border-white/10 bg-[#12141D]/95 px-3 py-1 text-[10px] text-[#FFB35C] tabular-nums">
+            Media {Math.round(room.duckLevel * 100)}%
+          </div>
+        </div>
+      ) : null}
+
       <div className="fixed bottom-[max(0.5rem,env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 z-50 w-[min(100%-0.75rem,640px)]">
         <motion.div
           layout
           className="glass px-1.5 sm:px-2 py-1.5 sm:py-2 rounded-2xl sm:rounded-3xl flex items-center gap-0.5 sm:gap-1 border border-white/10 overflow-x-auto no-scrollbar justify-start sm:justify-center"
         >
-          <motion.button
-            type="button"
-            whileTap={{ scale: 0.94 }}
-            onClick={room.toggleMic}
-            className="dock-btn w-10 h-10 sm:w-11 sm:h-11 shrink-0"
-            title="Microphone"
+          <Tooltip label={state.micOn ? "Mute microphone" : "Unmute microphone"}>
+            <motion.button
+              type="button"
+              whileTap={{ scale: 0.94 }}
+              onClick={room.toggleMic}
+              className="dock-btn w-10 h-10 sm:w-11 sm:h-11 shrink-0"
+              aria-label="Microphone"
+            >
+              <TwoToneIcon
+                icon={state.micOn ? Mic : MicOff}
+                tone={state.micOn ? "rose" : "muted"}
+                size={20}
+              />
+            </motion.button>
+          </Tooltip>
+          <Tooltip label={state.camOn ? "Turn camera off" : "Turn camera on"}>
+            <motion.button
+              type="button"
+              whileTap={{ scale: 0.94 }}
+              onClick={room.toggleCam}
+              className="dock-btn w-10 h-10 sm:w-11 sm:h-11 shrink-0"
+              aria-label="Camera"
+            >
+              <TwoToneIcon
+                icon={state.camOn ? Camera : CameraOff}
+                tone={state.camOn ? "default" : "muted"}
+                size={20}
+              />
+            </motion.button>
+          </Tooltip>
+          <Tooltip
+            label={
+              state.sharing
+                ? "Screen sharing is on"
+                : "Share your screen (Chrome desktop)"
+            }
           >
-            <TwoToneIcon
-              icon={state.micOn ? Mic : MicOff}
-              tone={state.micOn ? "rose" : "muted"}
-              size={20}
-            />
-          </motion.button>
-          <motion.button
-            type="button"
-            whileTap={{ scale: 0.94 }}
-            onClick={room.toggleCam}
-            className="dock-btn w-10 h-10 sm:w-11 sm:h-11 shrink-0"
-            title="Camera"
-          >
-            <TwoToneIcon
-              icon={state.camOn ? Camera : CameraOff}
-              tone={state.camOn ? "default" : "muted"}
-              size={20}
-            />
-          </motion.button>
-          <motion.button
-            type="button"
-            whileTap={{ scale: 0.94 }}
-            onClick={() => void room.startScreenShare()}
-            className="dock-btn h-10 sm:h-11 px-2.5 sm:px-3 shrink-0 gap-1.5 text-[11px] sm:text-xs font-medium text-[#9CA3AF]"
-            data-active={state.sharing}
-          >
-            <TwoToneIcon
-              icon={MonitorUp}
-              tone={state.sharing ? "amber" : "muted"}
-              size={18}
-            />
-            <span className="hidden sm:inline">
-              {state.sharing ? "Sharing" : "Share"}
-            </span>
-          </motion.button>
+            <motion.button
+              type="button"
+              whileTap={{ scale: 0.94 }}
+              onClick={() => void room.startScreenShare()}
+              className="dock-btn h-10 sm:h-11 px-2.5 sm:px-3 shrink-0 gap-1.5 text-[11px] sm:text-xs font-medium text-[#9CA3AF]"
+              data-active={state.sharing}
+              aria-label="Share screen"
+            >
+              <TwoToneIcon
+                icon={MonitorUp}
+                tone={state.sharing ? "amber" : "muted"}
+                size={18}
+              />
+              <span className="hidden sm:inline">
+                {state.sharing ? "Sharing" : "Share"}
+              </span>
+            </motion.button>
+          </Tooltip>
 
           <div className="w-px h-7 bg-white/10 mx-0.5 sm:mx-1 shrink-0" />
 
-          <motion.button
-            type="button"
-            whileTap={{ scale: 0.96 }}
-            onClick={() =>
-              room.setDuckingMode(state.duckingMode === "auto" ? "off" : "auto")
+          <Tooltip
+            label={
+              state.duckingMode === "auto"
+                ? "Auto-duck media when someone speaks (on)"
+                : "Auto-duck is off — use Talk to lower volume"
             }
-            className="control-chip px-2 sm:px-3 py-1.5 text-[10px] sm:text-xs font-semibold shrink-0 min-h-[32px] inline-flex items-center gap-1"
-            data-active={state.duckingMode === "auto"}
           >
-            <TwoToneIcon
-              icon={state.duckingMode === "auto" ? Volume2 : VolumeX}
-              tone={state.duckingMode === "auto" ? "rose" : "muted"}
-              size={14}
-            />
-            DUCK
-          </motion.button>
-          <motion.button
-            type="button"
-            whileTap={{ scale: 0.96 }}
-            onClick={room.triggerTalk}
-            className="control-chip px-2 sm:px-3 py-1.5 text-[10px] sm:text-xs shrink-0 min-h-[32px] inline-flex items-center gap-1"
-          >
-            <TwoToneIcon icon={Hand} tone="amber" size={14} />
-            Talk
-          </motion.button>
+            <motion.button
+              type="button"
+              whileTap={{ scale: 0.96 }}
+              onClick={() => {
+                const next =
+                  state.duckingMode === "auto" ? "off" : "auto";
+                room.setDuckingMode(next);
+                toast(
+                  next === "auto"
+                    ? "Auto ducking on"
+                    : "Auto ducking off — Talk still works",
+                );
+              }}
+              className="control-chip px-2 sm:px-3 py-1.5 text-[10px] sm:text-xs font-semibold shrink-0 min-h-[32px] inline-flex items-center gap-1"
+              data-active={state.duckingMode === "auto"}
+              aria-label="Toggle auto ducking"
+            >
+              <TwoToneIcon
+                icon={state.duckingMode === "auto" ? Volume2 : VolumeX}
+                tone={state.duckingMode === "auto" ? "rose" : "muted"}
+                size={14}
+              />
+              DUCK
+            </motion.button>
+          </Tooltip>
+          <Tooltip label="Lower YouTube/media for 2 seconds so you can talk">
+            <motion.button
+              type="button"
+              whileTap={{ scale: 0.96 }}
+              onClick={() => {
+                room.triggerTalk();
+                toast("Media ducked — go ahead and talk");
+              }}
+              className={`control-chip px-2 sm:px-3 py-1.5 text-[10px] sm:text-xs shrink-0 min-h-[32px] inline-flex items-center gap-1 ${
+                state.localSpeaking
+                  ? "border-[#FFB35C]/40 bg-[#FFB35C]/15 text-[#FFB35C]"
+                  : ""
+              }`}
+              aria-label="Talk — duck media"
+            >
+              <TwoToneIcon icon={Hand} tone="amber" size={14} />
+              Talk
+            </motion.button>
+          </Tooltip>
 
           <div className="w-px h-7 bg-white/10 mx-0.5 sm:mx-1 shrink-0" />
 
           {REACTIONS.map((r) => (
-            <motion.button
+            <Tooltip
               key={r.id}
-              type="button"
-              whileHover={{ y: -2 }}
-              whileTap={{ scale: 0.9 }}
-              onClick={() => room.sendReaction(r.emoji)}
-              className="dock-btn w-9 h-9 shrink-0"
-              title={r.id}
+              label={
+                r.id === "heart"
+                  ? "Send heart"
+                  : r.id === "laugh"
+                    ? "Send laugh"
+                    : r.id === "fire"
+                      ? "Send fire"
+                      : "Send cheers"
+              }
             >
-              <TwoToneIcon icon={r.icon} tone={r.tone} size={18} />
-            </motion.button>
+              <motion.button
+                type="button"
+                whileHover={{ y: -2 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={() => room.sendReaction(r.emoji)}
+                className="dock-btn w-9 h-9 shrink-0"
+                aria-label={r.id}
+              >
+                <TwoToneIcon icon={r.icon} tone={r.tone} size={18} />
+              </motion.button>
+            </Tooltip>
           ))}
         </motion.div>
       </div>

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { mistralJson } from "@/lib/ai/mistral";
-import { dealGame } from "@/lib/games/engine";
+import { dealGame, normalizeDeal } from "@/lib/games/engine";
 import type { GameId } from "@/lib/types";
 
 const VALID: GameId[] = [
@@ -35,7 +35,16 @@ Game rules:
     return NextResponse.json({
       source: "mistral",
       model: ai.model,
-      payload: ai.data.payload,
+      payload: normalizeDeal(gameId, ai.data.payload),
+    });
+  }
+
+  // AI sometimes returns the deal at the top level without "payload"
+  if (ai.ok && ai.data && typeof ai.data === "object" && !("payload" in ai.data)) {
+    return NextResponse.json({
+      source: "mistral",
+      model: ai.model,
+      payload: normalizeDeal(gameId, ai.data),
     });
   }
 
