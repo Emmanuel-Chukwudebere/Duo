@@ -63,9 +63,10 @@ export function RoomShell({ code }: { code: string }) {
   >([]);
   const [remoteYtCommand, setRemoteYtCommand] = useState<{
     id: number;
-    kind: "play" | "pause" | "seek" | "load";
+    kind: "play" | "pause" | "seek" | "load" | "sync";
     seconds?: number;
     videoId?: string;
+    playing?: boolean;
   } | null>(null);
   const [bubblesCollapsed, setBubblesCollapsed] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
@@ -118,8 +119,9 @@ export function RoomShell({ code }: { code: string }) {
         if (msg.type === "yt.time")
           setRemoteYtCommand({
             id: Date.now(),
-            kind: "seek",
+            kind: "sync",
             seconds: msg.seconds,
+            playing: msg.playing,
           });
         if (msg.type === "yt.load")
           setRemoteYtCommand({
@@ -169,6 +171,16 @@ export function RoomShell({ code }: { code: string }) {
   const bubbleSize = bubblesCollapsed
     ? "w-14 h-14 sm:w-16 sm:h-16"
     : "w-[72px] h-[72px] sm:w-[100px] sm:h-[100px] md:w-[112px] md:h-[112px]";
+
+  // Offset for the SECOND bubble so the two never overlap: base inset (12px) +
+  // bubble width + an 8px gap, per breakpoint & collapsed state. (The earlier
+  // fixed 5.25rem equalled inset+width exactly, so the bubbles touched on mobile.)
+  const secondOffset = bubblesCollapsed
+    ? "left-[4.75rem] sm:left-[5.5rem]" // 56/64px bubbles
+    : "left-[5.75rem] sm:left-[7.5rem] md:left-[8.25rem]"; // 72/100/112px bubbles
+  const secondOffsetRight = bubblesCollapsed
+    ? "right-[4.75rem] sm:right-[5.5rem]"
+    : "right-[5.75rem] sm:right-[7.5rem] md:right-[8.25rem]";
 
   return (
     <div className="h-dvh max-h-dvh flex flex-col overflow-hidden bg-[#0A0B10]">
@@ -377,7 +389,7 @@ export function RoomShell({ code }: { code: string }) {
             className={`${bubbleSize} ${
               state.mode === "cinema"
                 ? "bottom-3 left-3"
-                : "bottom-3 right-[5.25rem] sm:right-[6.5rem]"
+                : `bottom-3 ${secondOffsetRight}`
             }`}
             style={{ opacity: state.camOn ? 1 : 0.45 }}
           >
@@ -403,7 +415,7 @@ export function RoomShell({ code }: { code: string }) {
             dragConstraintsRef={stageConstraintsRef}
             className={`${bubbleSize} ${
               state.mode === "cinema"
-                ? "bottom-3 left-[4.75rem] sm:left-[5.25rem]"
+                ? `bottom-3 ${secondOffset}`
                 : "bottom-3 right-3"
             }`}
           >

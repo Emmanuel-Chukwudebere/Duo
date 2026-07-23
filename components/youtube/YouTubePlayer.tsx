@@ -103,9 +103,10 @@ export interface YouTubePlayerProps {
   onTime?: (seconds: number, playing: boolean) => void;
   remoteCommand?: {
     id: number;
-    kind: "play" | "pause" | "seek" | "load";
+    kind: "play" | "pause" | "seek" | "load" | "sync";
     seconds?: number;
     videoId?: string;
+    playing?: boolean;
   } | null;
   compact?: boolean;
   autoPlayOnLoad?: boolean;
@@ -134,6 +135,7 @@ export function YouTubePlayer({
   const onPlayRef = useRef(onPlay);
   const onPauseRef = useRef(onPause);
   const lastRemoteId = useRef<number | null>(null);
+  const pendingRemote = useRef<YouTubePlayerProps["remoteCommand"] | null>(null);
   const reactId = useId().replace(/:/g, "");
   const [playing, setPlaying] = useState(false);
   const [playerReady, setPlayerReady] = useState(false);
@@ -204,6 +206,13 @@ export function YouTubePlayer({
             playerRef.current = e.target;
             setPlayerReady(true);
             applyDuck(e.target, duckRef.current);
+            // Apply any remote command that arrived before the player was ready
+            // (e.g. the follower loaded the page mid-playback).
+            if (!isControllerRef.current && pendingRemote.current) {
+              const cmd = pendingRemote.current;
+              pendingRemote.current = null;
+              window.setTimeout(() => applyRemote(cmd), 300);
+            }
             if (autoPlayOnLoad) {
               forcePlay(e.target);
               // Unmute after start so dinner soundtrack is audible
@@ -264,26 +273,51 @@ export function YouTubePlayer({
     applyDuck(p, duckLevel);
   }, [duckLevel, applyDuck]);
 
-  // Remote commands
+  const applyRemote = useCallback(
+    (cmd: NonNullable<YouTubePlayerProps["remoteCommand"]>) => {
+      const p = playerRef.current;
+      if (!p || !readyRef.current) return;
+      try {
+        if (cmd.kind === "play") forcePlay(p);
+        if (cmd.kind === "pause") p.pauseVideo();
+        if (cmd.kind === "seek" && cmd.seconds != null)
+          p.seekTo(cmd.seconds, true);
+        if (cmd.kind === "load" && cmd.videoId) {
+          p.loadVideoById(cmd.videoId);
+          forcePlay(p);
+        }
+        if (cmd.kind === "sync") {
+          // Periodic reconcile from the controller's heartbeat: only seek when
+          // drift is real (>1.5s) to avoid stutter, and match play/pause state.
+          if (cmd.seconds != null) {
+            const here = p.getCurrentTime();
+            if (Math.abs(here - cmd.seconds) > 1.5) p.seekTo(cmd.seconds, true);
+          }
+          if (cmd.playing === true && p.getPlayerState() !== window.YT?.PlayerState.PLAYING)
+            forcePlay(p);
+          if (cmd.playing === false && p.getPlayerState() === window.YT?.PlayerState.PLAYING)
+            p.pauseVideo();
+        }
+      } catch {
+        /* ignore */
+      }
+    },
+    [],
+  );
+
+  // Remote commands (follower). If the player isn't ready yet, stash the command
+  // and apply it on onReady — otherwise the first play/load is dropped forever and
+  // the follower stays paused until they click play manually.
   useEffect(() => {
     if (!remoteCommand || isController) return;
     if (lastRemoteId.current === remoteCommand.id) return;
     lastRemoteId.current = remoteCommand.id;
-    const p = playerRef.current;
-    if (!p || !readyRef.current) return;
-    try {
-      if (remoteCommand.kind === "play") forcePlay(p);
-      if (remoteCommand.kind === "pause") p.pauseVideo();
-      if (remoteCommand.kind === "seek" && remoteCommand.seconds != null)
-        p.seekTo(remoteCommand.seconds, true);
-      if (remoteCommand.kind === "load" && remoteCommand.videoId) {
-        p.loadVideoById(remoteCommand.videoId);
-        forcePlay(p);
-      }
-    } catch {
-      /* ignore */
+    if (!playerRef.current || !readyRef.current) {
+      pendingRemote.current = remoteCommand;
+      return;
     }
-  }, [remoteCommand, isController]);
+    applyRemote(remoteCommand);
+  }, [remoteCommand, isController, applyRemote]);
 
   useEffect(() => {
     if (!isController) return;

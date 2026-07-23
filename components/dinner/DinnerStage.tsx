@@ -30,9 +30,10 @@ export function DinnerStage({
   onLoadYoutube: (id: string, title?: string) => void;
   remoteYtCommand: {
     id: number;
-    kind: "play" | "pause" | "seek" | "load";
+    kind: "play" | "pause" | "seek" | "load" | "sync";
     seconds?: number;
     videoId?: string;
+    playing?: boolean;
   } | null;
   onYtEvent: (msg: DuoAppMessage) => void;
 }) {
