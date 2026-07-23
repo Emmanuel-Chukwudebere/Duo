@@ -13,27 +13,40 @@ import type {
 } from "@/lib/types";
 import { VadDuckingEngine } from "@/lib/audio/vad-ducking";
 
-const ICE: RTCConfiguration = {
+// STUN-only default. This connects peers on the SAME network, but cross-network
+// calls (partners on different devices behind NATs) need a TURN relay, which is
+// fetched at runtime from /api/turn (Cloudflare or any env-configured provider).
+// The old hard-coded openrelay.metered.ca TURN server is dead — it returned zero
+// relay candidates, which is exactly why cross-device calls hung at "connecting".
+const DEFAULT_ICE: RTCConfiguration = {
   iceServers: [
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" },
-    { urls: "stun:stun2.l.google.com:19302" },
-    { urls: "stun:stun3.l.google.com:19302" },
-    { urls: "stun:stun4.l.google.com:19302" },
     { urls: "stun:stun.cloudflare.com:3478" },
-    {
-      urls: "turn:openrelay.metered.ca:80",
-      username: "openrelayproject",
-      credential: "openrelayproject",
-    },
-    {
-      urls: "turn:openrelay.metered.ca:443",
-      username: "openrelayproject",
-      credential: "openrelayproject",
-    },
   ],
-  iceCandidatePoolSize: 10,
+  iceCandidatePoolSize: 4,
 };
+
+/** Fetch ICE servers (incl. TURN relay) from the server. Falls back to STUN-only. */
+async function fetchIceConfig(): Promise<RTCConfiguration> {
+  try {
+    const res = await fetch("/api/turn", { cache: "no-store" });
+    if (res.ok) {
+      const data = (await res.json()) as {
+        iceServers?: RTCIceServer[];
+        relay?: boolean;
+        warning?: string;
+      };
+      if (data.warning) console.warn("[duo] TURN:", data.warning);
+      if (Array.isArray(data.iceServers) && data.iceServers.length > 0) {
+        return { iceServers: data.iceServers, iceCandidatePoolSize: 4 };
+      }
+    }
+  } catch (e) {
+    console.warn("[duo] Failed to fetch ICE config, using STUN-only", e);
+  }
+  return DEFAULT_ICE;
+}
 
 type SignalMsg = {
   type: "offer" | "answer" | "ice" | "ready";
@@ -111,8 +124,17 @@ export function useDuoRoom(roomCode: string) {
   const channelRef = useRef<RealtimeChannel | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
-  const remoteCamStreamRef = useRef<MediaStream>(new MediaStream());
-  const remoteScreenStreamRef = useRef<MediaStream>(new MediaStream());
+  // Lazily created on the client only. `new MediaStream()` does not exist during
+  // server-side render, so initializing these inline would 500 the room page on a
+  // direct link/QR load (exactly how a partner joins). All consumers of these refs
+  // run client-side (effects + event handlers), after this guard has populated them.
+  const remoteCamStreamRef = useRef<MediaStream>(null as unknown as MediaStream);
+  const remoteScreenStreamRef = useRef<MediaStream>(null as unknown as MediaStream);
+  if (typeof window !== "undefined") {
+    if (!remoteCamStreamRef.current) remoteCamStreamRef.current = new MediaStream();
+    if (!remoteScreenStreamRef.current)
+      remoteScreenStreamRef.current = new MediaStream();
+  }
   const screenSendersRef = useRef<RTCRtpSender[]>([]);
   const makingOffer = useRef(false);
   const ignoreOffer = useRef(false);
@@ -125,6 +147,7 @@ export function useDuoRoom(roomCode: string) {
   const appHandlers = useRef(new Set<(msg: DuoAppMessage) => void>());
   const expectRemoteScreenRef = useRef(false);
   const processedMsgIdsRef = useRef<Set<string>>(new Set());
+  const iceConfigRef = useRef<RTCConfiguration>(DEFAULT_ICE);
 
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -320,7 +343,7 @@ export function useDuoRoom(roomCode: string) {
 
   const ensurePc = useCallback(() => {
     if (pcRef.current) return pcRef.current;
-    const pc = new RTCPeerConnection(ICE);
+    const pc = new RTCPeerConnection(iceConfigRef.current);
     pcRef.current = pc;
     remoteDescSetRef.current = false;
     iceQueueRef.current = [];
@@ -610,6 +633,11 @@ export function useDuoRoom(roomCode: string) {
 
     async function join() {
       try {
+        // Load ICE servers (incl. TURN relay) before any PeerConnection is built,
+        // so cross-network peers have a relay path from the very first offer.
+        iceConfigRef.current = await fetchIceConfig();
+        if (cancelled) return;
+
         const supabase = getSupabaseBrowserClient();
         const channel = supabase.channel(roomChannelName(roomCode), {
           config: {
@@ -775,27 +803,55 @@ export function useDuoRoom(roomCode: string) {
 
   // Heartbeat / self-healing signaling retry when partner present but media not connected
   useEffect(() => {
+    let retryCount = 0;
     const interval = setInterval(() => {
-      if (!partnerIdRef.current) return;
+      if (!partnerIdRef.current) {
+        retryCount = 0;
+        return;
+      }
       const pc = pcRef.current;
       const connState = pc?.connectionState;
-      if (connState !== "connected") {
-        if (isInitiatorRef.current) {
-          if (pc && pc.signalingState === "stable" && !makingOffer.current) {
-            void createAndSendOffer();
-          }
-        } else {
-          broadcastSignal({
-            type: "ready",
-            from: peerIdRef.current,
-            to: partnerIdRef.current,
-          });
-        }
+
+      if (connState === "connected") {
+        retryCount = 0;
+        return;
       }
-    }, 2500);
+
+      retryCount++;
+
+      // After ~9s of failed connection, tear down PC completely and start fresh.
+      // This fixes the case where an answer was lost and the PC is stuck
+      // in "have-local-offer" signaling state forever.
+      if (retryCount > 3 && pc) {
+        try { pc.close(); } catch { /* ignore */ }
+        pcRef.current = null;
+        dcRef.current = null;
+        remoteDescSetRef.current = false;
+        iceQueueRef.current = [];
+        makingOffer.current = false;
+        ignoreOffer.current = false;
+        update({ status: "Retrying connection…" });
+      }
+
+      if (isInitiatorRef.current) {
+        // createAndSendOffer calls ensurePc() which will create a fresh PC
+        // if we just tore it down above
+        if (!makingOffer.current) {
+          void createAndSendOffer();
+        }
+      } else {
+        // Non-initiator: ensure PC exists and send ready signal
+        ensurePc();
+        broadcastSignal({
+          type: "ready",
+          from: peerIdRef.current,
+          to: partnerIdRef.current,
+        });
+      }
+    }, 3000);
 
     return () => clearInterval(interval);
-  }, [broadcastSignal, createAndSendOffer]);
+  }, [broadcastSignal, createAndSendOffer, ensurePc, update]);
 
   // Re-bind remote video element if ref mounts late
   useEffect(() => {
@@ -1025,14 +1081,21 @@ export function useDuoRoom(roomCode: string) {
   const resync = useCallback(() => {
     if (partnerIdRef.current) {
       update({ status: "Re-syncing with partner…" });
-      try {
-        pcRef.current?.restartIce();
-      } catch {
-        /* ignore */
-      }
+
+      // Full teardown — restartIce() alone can't recover a stuck
+      // signalingState (e.g. "have-local-offer" from a lost answer).
+      try { pcRef.current?.close(); } catch { /* ignore */ }
+      pcRef.current = null;
+      dcRef.current = null;
+      remoteDescSetRef.current = false;
+      iceQueueRef.current = [];
+      makingOffer.current = false;
+      ignoreOffer.current = false;
+
       if (isInitiatorRef.current) {
         void createAndSendOffer();
       } else {
+        ensurePc();
         broadcastSignal({
           type: "ready",
           from: peerIdRef.current,
@@ -1043,7 +1106,7 @@ export function useDuoRoom(roomCode: string) {
     } else {
       update({ status: "Waiting for partner…" });
     }
-  }, [broadcastSignal, createAndSendOffer, sendApp, update]);
+  }, [broadcastSignal, createAndSendOffer, ensurePc, sendApp, update]);
 
   const isYtController = state.ytControllerId === state.peerId;
 

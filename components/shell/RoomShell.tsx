@@ -522,7 +522,7 @@ export function RoomShell({ code }: { code: string }) {
       <div className="fixed bottom-[max(0.5rem,env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 z-50 w-[min(100%-0.75rem,640px)] px-1">
         <motion.div
           layout
-          className="glass px-1.5 sm:px-2 py-1.5 sm:py-2 rounded-2xl sm:rounded-3xl flex items-center gap-0.5 sm:gap-1 border border-white/10 overflow-x-auto no-scrollbar justify-start sm:justify-center"
+          className="glass px-1.5 sm:px-2 py-1.5 sm:py-2 rounded-2xl sm:rounded-3xl flex items-center gap-0.5 sm:gap-1 border border-white/10 overflow-x-auto sm:overflow-visible no-scrollbar justify-start sm:justify-center"
         >
           <Tooltip label={state.micOn ? "Mute microphone" : "Unmute microphone"}>
             <motion.button

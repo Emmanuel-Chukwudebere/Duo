@@ -14,16 +14,16 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Duo — Midnight Lounge for Couples",
+  title: "Duo — Date Nights, Anywhere",
   description:
-    "Ephemeral long-distance date rooms: WebRTC video, YouTube co-watch, dinner prompts, mini-games, and voice audio ducking.",
+    "Private date rooms for long-distance couples. Video call, watch YouTube together, play games, and keep the spark alive — no sign-up needed.",
   metadataBase: new URL(
     process.env.NEXT_PUBLIC_APP_URL || "https://justduo.vercel.app",
   ),
   openGraph: {
-    title: "Duo — Midnight Lounge for Couples",
+    title: "Duo — Date Nights, Anywhere",
     description:
-      "Ephemeral long-distance date rooms with WebRTC video, YouTube co-watch, games, and voice audio ducking.",
+      "Create a private date room in seconds. Video call your partner, watch movies together, play couple games, and vibe — all from your browser.",
     url: "https://justduo.vercel.app",
     siteName: "Duo",
     images: [
@@ -31,7 +31,7 @@ export const metadata: Metadata = {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "Duo — Midnight Lounge for Long-Distance Couples",
+        alt: "Duo — Private date rooms for couples",
       },
     ],
     locale: "en_US",
@@ -39,9 +39,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Duo — Midnight Lounge for Couples",
+    title: "Duo — Date Nights, Anywhere",
     description:
-      "Ephemeral long-distance date rooms with WebRTC video, YouTube co-watch, games, and voice audio ducking.",
+      "Private date rooms for couples. Video, YouTube watch parties, games & conversation starters — right in your browser ✨",
     images: ["/og-image.png"],
   },
   icons: {
