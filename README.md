@@ -15,6 +15,7 @@
 - 🎮 **Co-op Mini Games**: Interactive turn-based games including *Word Association*, *Starts With*, *Start & End*, *Places*, and *Would You Rather*.
 - 🎙️ **Voice-Activated Audio Ducking (VAD)**: Smart Web Audio engine automatically lowers YouTube/media audio when either partner speaks, ensuring clear conversation.
 - 🖥️ **High-FPS Screen Share**: Share your browser window or full display directly inside the room stage.
+- 📊 **Vercel Analytics Integration**: Built-in privacy-friendly visitor and date-session tracking.
 - ⚡ **Dual-Path Realtime Resilience**: WebRTC DataChannel paired with Supabase Realtime Broadcast fallback for instant state synchronization even across strict networks/firewalls.
 
 ---
