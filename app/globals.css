@@ -116,3 +116,24 @@ body {
     opacity: 0;
   }
 }
+
+/* Hide scrollbar on dock while keeping scroll */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Mobile-safe touch defaults */
+button,
+[role="button"] {
+  touch-action: manipulation;
+}
+
+@media (max-width: 640px) {
+  .video-bubble {
+    border-width: 3px;
+  }
+}

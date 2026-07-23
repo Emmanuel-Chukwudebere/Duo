@@ -135,17 +135,19 @@ export function GamesStage({
 
   if (!active || !payload) {
     return (
-      <div className="absolute inset-0 p-6 md:p-8 overflow-auto">
-        <div className="mb-6">
-          <div className="text-xs tracking-wider text-[#8A5CF5] font-medium uppercase">
+      <div className="absolute inset-0 p-3 sm:p-6 md:p-8 overflow-auto pb-24 sm:pb-8">
+        <div className="mb-4 sm:mb-6">
+          <div className="text-[10px] sm:text-xs tracking-wider text-[#8A5CF5] font-medium uppercase">
             Playful mode
           </div>
-          <h2 className="text-2xl font-semibold tracking-tight">Pick a game</h2>
-          <p className="text-sm text-[#9CA3AF] mt-1">
+          <h2 className="text-xl sm:text-2xl font-semibold tracking-tight">
+            Pick a game
+          </h2>
+          <p className="text-xs sm:text-sm text-[#9CA3AF] mt-1">
             App deals the prompts. Talk it out together.
           </p>
         </div>
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {GAME_IDS.map((id) => {
             const meta = GAME_META[id];
             return (
@@ -188,7 +190,7 @@ export function GamesStage({
   const meta = GAME_META[active];
 
   return (
-    <div className="absolute inset-0 p-6 md:p-8 flex flex-col gap-4 overflow-auto">
+    <div className="absolute inset-0 p-3 sm:p-6 md:p-8 flex flex-col gap-3 sm:gap-4 overflow-auto pb-24 sm:pb-8">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <div

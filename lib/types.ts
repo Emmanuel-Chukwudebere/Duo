@@ -36,7 +36,9 @@ export type DuoAppMessage =
   | { type: "game.action"; gameId: GameId; action: unknown }
   | { type: "game.sync"; gameId: GameId; state: unknown }
   | { type: "dinner.flip"; cardId: string; flipped: boolean }
-  | { type: "dinner.deal"; cards: DinnerCard[] };
+  | { type: "dinner.deal"; cards: DinnerCard[] }
+  | { type: "screen.start" }
+  | { type: "screen.stop" };
 
 export interface DinnerCard {
   id: string;

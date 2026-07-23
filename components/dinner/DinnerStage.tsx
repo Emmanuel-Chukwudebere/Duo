@@ -83,32 +83,32 @@ export function DinnerStage({
     k === "wyr" ? "WOULD YOU RATHER" : k === "deep" ? "DEEP QUESTION" : "ICEBREAKER";
 
   return (
-    <div className="absolute inset-0 p-6 md:p-8 flex flex-col gap-4 overflow-auto">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
+    <div className="absolute inset-0 p-3 sm:p-6 md:p-8 flex flex-col gap-3 sm:gap-4 overflow-auto pb-24 sm:pb-8">
+      <div className="flex items-start justify-between gap-3 flex-wrap shrink-0">
         <div>
-          <div className="text-xs tracking-wider text-[#FF5A79] font-medium uppercase">
+          <div className="text-[10px] sm:text-xs tracking-wider text-[#FF5A79] font-medium uppercase">
             Tonight&apos;s vibe
           </div>
-          <h2 className="text-2xl font-semibold tracking-tight">
+          <h2 className="text-xl sm:text-2xl font-semibold tracking-tight">
             Dinner &amp; Deep Talk
           </h2>
         </div>
         <button
           type="button"
           onClick={refresh}
-          className="px-4 py-2 text-sm rounded-2xl glass hover:bg-white/10"
+          className="px-3 sm:px-4 py-2 text-xs sm:text-sm rounded-2xl glass hover:bg-white/10 min-h-[40px]"
         >
           Fresh prompts
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 flex-1 content-center">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4 flex-1 content-start sm:content-center">
         {cards.map((card) => (
           <button
             key={card.id}
             type="button"
             onClick={() => flip(card.id)}
-            className="relative h-[200px] w-full [perspective:1000px]"
+            className="relative h-[180px] sm:h-[200px] w-full [perspective:1000px]"
           >
             <div
               className={`prompt-card relative h-full w-full ${
