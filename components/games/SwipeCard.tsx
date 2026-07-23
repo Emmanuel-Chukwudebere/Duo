@@ -47,14 +47,9 @@ export function SwipeCard({
     const ox = info.offset.x;
     const oy = info.offset.y;
     const vx = info.velocity.x;
-    const vy = info.velocity.y;
 
-    // Prefer horizontal for left/right; strong upward flick = up
-    if (oy < -SWIPE_THRESHOLD || vy < -VELOCITY_THRESHOLD) {
-      setExit({ x: ox, y: -520 });
-      onSwipe("up");
-      return;
-    }
+    // Horizontal-only: drag is locked to the x-axis so vertical finger motion
+    // scrolls the page instead of swiping the card. (Up = AI deal is a button.)
     if (ox > SWIPE_THRESHOLD || vx > VELOCITY_THRESHOLD) {
       setExit({ x: 520, y: oy });
       onSwipe("right");
@@ -69,9 +64,14 @@ export function SwipeCard({
 
   return (
     <motion.div
-      className={`absolute inset-0 touch-none select-none ${className}`}
+      // `touch-pan-y` (not `touch-none`) lets a vertical finger drag scroll the
+      // page/list normally; horizontal drags are still captured for swiping.
+      // `dragDirectionLock` commits to the first axis so a scroll never turns
+      // into an accidental card swipe on mobile.
+      className={`absolute inset-0 touch-pan-y select-none ${className}`}
       style={{ x, y, rotate, ...style }}
-      drag={drag && !disabled && !exit ? true : false}
+      drag={drag && !disabled && !exit ? "x" : false}
+      dragDirectionLock
       dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
       dragElastic={0.92}
       onDragEnd={handleDragEnd}

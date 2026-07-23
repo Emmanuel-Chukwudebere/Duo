@@ -278,7 +278,7 @@ export function GamesStage({
                   </span>
                   <span className="inline-flex items-center gap-1.5">
                     <Sparkles className="h-3.5 w-3.5 text-violet-300/80" />
-                    Swipe up · AI
+                    AI · tap ✨
                   </span>
                   <span className="inline-flex items-center gap-1.5">
                     <Check className="h-3.5 w-3.5 text-emerald-300/80" />
@@ -286,7 +286,7 @@ export function GamesStage({
                   </span>
                 </div>
                 <p className="text-center text-[10px] text-[#9CA3AF]/70">
-                  Drag with mouse or finger
+                  Swipe left/right or use the buttons
                 </p>
               </div>
             </div>

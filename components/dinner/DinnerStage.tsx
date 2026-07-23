@@ -97,7 +97,7 @@ export function DinnerStage({
     k === "wyr" ? "WOULD YOU RATHER" : k === "deep" ? "DEEP QUESTION" : "ICEBREAKER";
 
   return (
-    <div className="absolute inset-0 p-3 sm:p-6 md:p-8 flex flex-col gap-3 sm:gap-4 overflow-auto pb-24 sm:pb-8">
+    <div className="absolute inset-0 p-3 sm:p-6 md:p-8 flex flex-col gap-3 sm:gap-4 overflow-auto no-scrollbar pb-24 sm:pb-8">
       <div className="flex items-start justify-between gap-3 flex-wrap shrink-0">
         <div>
           <div className="text-[10px] sm:text-xs tracking-wider text-[#FF5A79] font-medium uppercase">

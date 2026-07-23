@@ -215,7 +215,7 @@ export function CinemaStage({
       </div>
 
       {cinemaSource === "youtube" ? (
-        <div className="flex-1 flex flex-col gap-2 sm:gap-3 min-h-0 overflow-y-auto">
+        <div className="flex-1 flex flex-col gap-2 sm:gap-3 min-h-0 overflow-y-auto no-scrollbar">
           {isYtController ? (
             <YouTubeSearch activeVideoId={ytVideoId} onPick={onLoadYoutube} />
           ) : (
