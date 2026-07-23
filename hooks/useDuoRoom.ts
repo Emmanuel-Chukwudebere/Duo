@@ -135,7 +135,6 @@ export function useDuoRoom(roomCode: string) {
     if (!remoteScreenStreamRef.current)
       remoteScreenStreamRef.current = new MediaStream();
   }
-  const screenSendersRef = useRef<RTCRtpSender[]>([]);
   const makingOffer = useRef(false);
   const ignoreOffer = useRef(false);
   const isInitiatorRef = useRef(false);
@@ -145,9 +144,18 @@ export function useDuoRoom(roomCode: string) {
   const iceQueueRef = useRef<RTCIceCandidateInit[]>([]);
   const remoteDescSetRef = useRef(false);
   const appHandlers = useRef(new Set<(msg: DuoAppMessage) => void>());
-  const expectRemoteScreenRef = useRef(false);
   const processedMsgIdsRef = useRef<Set<string>>(new Set());
   const iceConfigRef = useRef<RTCConfiguration>(DEFAULT_ICE);
+  // Fixed transceivers in a deterministic order → identical m-line order on both
+  // peers, forever. Tracks are swapped via replaceTrack (no renegotiation), which
+  // prevents the "m-line order doesn't match" error that broke video + made screen
+  // share blink, and lets camera/screen start & stop without a fresh offer.
+  const transceiversRef = useRef<{
+    camAudio: RTCRtpTransceiver;
+    camVideo: RTCRtpTransceiver;
+    screenVideo: RTCRtpTransceiver;
+    screenAudio: RTCRtpTransceiver;
+  } | null>(null);
 
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -307,7 +315,8 @@ export function useDuoRoom(roomCode: string) {
           });
         }
         if (msg.type === "screen.start") {
-          expectRemoteScreenRef.current = true;
+          // The actual video arrives on the screen transceiver (ontrack); this
+          // just flips the stage to cinema so the incoming frame has somewhere to go.
           update({
             remoteSharing: true,
             mode: "cinema",
@@ -315,11 +324,11 @@ export function useDuoRoom(roomCode: string) {
           });
         }
         if (msg.type === "screen.stop") {
-          expectRemoteScreenRef.current = false;
-          remoteScreenStreamRef.current.getTracks().forEach((t) => {
-            remoteScreenStreamRef.current.removeTrack(t);
-            t.stop();
-          });
+          // Sender detached via replaceTrack(null); clear our view of it. Don't
+          // stop() the remote tracks — the transceiver is reused for the next share.
+          remoteScreenStreamRef.current
+            .getTracks()
+            .forEach((t) => remoteScreenStreamRef.current.removeTrack(t));
           if (screenVideoRef.current) screenVideoRef.current.srcObject = null;
           update({ remoteSharing: false });
         }
@@ -357,6 +366,47 @@ export function useDuoRoom(roomCode: string) {
     remoteDescSetRef.current = false;
     iceQueueRef.current = [];
 
+    // Pre-create a FIXED set of transceivers in a deterministic order on BOTH
+    // peers. This locks the SDP m-line order so renegotiation can never fail with
+    // "m-line order doesn't match". Tracks are attached later via replaceTrack —
+    // which needs NO renegotiation — so camera and screen share start/stop
+    // without a fresh offer (this is what stops the screen-share blinking).
+    const camAudio = pc.addTransceiver("audio", { direction: "sendrecv" });
+    const camVideo = pc.addTransceiver("video", {
+      direction: "sendrecv",
+      // Prioritize a smooth, low-latency face-cam over resolution: when bandwidth
+      // is tight, drop resolution (not framerate) so the partner sees fluid motion
+      // instead of a laggy, buffered feed. Cap bitrate so cam never starves screen.
+      sendEncodings: [
+        {
+          maxBitrate: 800_000,
+          maxFramerate: 30,
+          scaleResolutionDownBy: 1,
+          networkPriority: "high",
+        },
+      ],
+    });
+    const screenVideo = pc.addTransceiver("video", { direction: "sendrecv" });
+    const screenAudio = pc.addTransceiver("audio", { direction: "sendrecv" });
+    transceiversRef.current = { camAudio, camVideo, screenVideo, screenAudio };
+
+    // Attach any already-acquired local camera tracks immediately.
+    const local = localStreamRef.current;
+    if (local) {
+      const a = local.getAudioTracks()[0];
+      const v = local.getVideoTracks()[0];
+      if (a) void camAudio.sender.replaceTrack(a).catch(() => undefined);
+      if (v) void camVideo.sender.replaceTrack(v).catch(() => undefined);
+    }
+    // Re-attach an in-progress screen share (e.g. after a PC rebuild).
+    const screen = screenStreamRef.current;
+    if (screen) {
+      const sv = screen.getVideoTracks()[0];
+      const sa = screen.getAudioTracks()[0];
+      if (sv) void screenVideo.sender.replaceTrack(sv).catch(() => undefined);
+      if (sa) void screenAudio.sender.replaceTrack(sa).catch(() => undefined);
+    }
+
     pc.onnegotiationneeded = () => {
       if (
         isInitiatorRef.current &&
@@ -368,44 +418,48 @@ export function useDuoRoom(roomCode: string) {
       }
     };
 
+    // Route incoming tracks by WHICH transceiver received them — reliable and
+    // order-stable, unlike guessing from a "screen expected" flag.
     pc.ontrack = (ev) => {
+      const tr = ev.transceiver;
+      const t = transceiversRef.current;
       const track = ev.track;
 
-      if (track.kind === "audio") {
-        if (expectRemoteScreenRef.current) {
-          const screen = remoteScreenStreamRef.current;
-          if (!screen.getAudioTracks().some((t) => t.id === track.id)) {
-            screen.addTrack(track);
+      const isScreen =
+        !!t && (tr === t.screenVideo || tr === t.screenAudio);
+
+      if (isScreen) {
+        const rs = remoteScreenStreamRef.current;
+        // Clear stale tracks of the same kind, then add the fresh one.
+        rs.getTracks()
+          .filter((x) => x.kind === track.kind)
+          .forEach((x) => rs.removeTrack(x));
+        rs.addTrack(track);
+        // A muted screen-video track means the sharer stopped (replaceTrack null).
+        const hasLiveScreen = rs
+          .getVideoTracks()
+          .some((x) => x.readyState === "live" && !x.muted);
+        track.onmute = () => update({ remoteSharing: rs.getVideoTracks().some((x) => !x.muted) });
+        track.onunmute = () => {
+          if (screenVideoRef.current) {
+            screenVideoRef.current.srcObject = rs;
+            void screenVideoRef.current.play().catch(() => undefined);
           }
-        } else {
-          attachRemoteCam(track);
+          update({ remoteSharing: true, mode: "cinema", cinemaSource: "screen" });
+        };
+        if (track.kind === "video" && screenVideoRef.current) {
+          screenVideoRef.current.srcObject = rs;
+          void screenVideoRef.current.play().catch(() => undefined);
+        }
+        if (hasLiveScreen) {
+          update({ remoteSharing: true, mode: "cinema", cinemaSource: "screen" });
         }
         return;
       }
 
-      if (track.kind === "video") {
-        if (expectRemoteScreenRef.current) {
-          const screen = remoteScreenStreamRef.current;
-          screen.getVideoTracks().forEach((t) => {
-            screen.removeTrack(t);
-            t.stop();
-          });
-          screen.addTrack(track);
-          expectRemoteScreenRef.current = false;
-          if (screenVideoRef.current) {
-            screenVideoRef.current.srcObject = screen;
-            void screenVideoRef.current.play().catch(() => undefined);
-          }
-          update({
-            remoteSharing: true,
-            mode: "cinema",
-            cinemaSource: "screen",
-          });
-        } else {
-          attachRemoteCam(track);
-          update({ status: "Connected with partner" });
-        }
-      }
+      // Otherwise it's the camera/mic.
+      attachRemoteCam(track);
+      if (track.kind === "video") update({ status: "Connected with partner" });
     };
 
     pc.onconnectionstatechange = () => {
@@ -471,24 +525,15 @@ export function useDuoRoom(roomCode: string) {
 
     try {
       makingOffer.current = true;
-      const local = localStreamRef.current;
-      if (local) {
-        const senders = pc.getSenders();
-        for (const track of local.getTracks()) {
-          const has = senders.some((s) => s.track?.id === track.id);
-          if (!has) pc.addTrack(track, local);
-        }
-      }
+      // Camera tracks are attached to fixed transceivers via replaceTrack in
+      // startLocalMedia/ensurePc — no addTrack here, so m-line order stays stable.
 
       if (isInitiatorRef.current && !dcRef.current) {
         const dc = pc.createDataChannel("duo-app", { ordered: true });
         setupDataChannel(dc);
       }
 
-      const offer = await pc.createOffer({
-        offerToReceiveAudio: true,
-        offerToReceiveVideo: true,
-      });
+      const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       broadcastSignal({
         type: "offer",
@@ -508,21 +553,42 @@ export function useDuoRoom(roomCode: string) {
   const startLocalMedia = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user" },
+        // Constrain capture to 720p/30 — smaller frames encode faster and cut the
+        // partner-cam latency. Ideal (not exact) so devices pick their best match.
+        video: {
+          facingMode: "user",
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          frameRate: { ideal: 30, max: 30 },
+        },
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
         },
       });
       localStreamRef.current = stream;
+      // Tell the encoder this is a talking-head: favor smooth motion over crispness,
+      // which meaningfully reduces the partner-cam latency the user reported.
+      const camTrack = stream.getVideoTracks()[0];
+      if (camTrack) {
+        try {
+          camTrack.contentHint = "motion";
+        } catch {
+          /* optional */
+        }
+      }
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
         void localVideoRef.current.play().catch(() => undefined);
       }
-      const pc = ensurePc();
-      for (const track of stream.getTracks()) {
-        const already = pc.getSenders().some((s) => s.track?.id === track.id);
-        if (!already) pc.addTrack(track, stream);
+      ensurePc();
+      // Attach camera/mic to their fixed transceivers (no renegotiation churn).
+      const tx = transceiversRef.current;
+      if (tx) {
+        const a = stream.getAudioTracks()[0];
+        const v = stream.getVideoTracks()[0];
+        if (a) await tx.camAudio.sender.replaceTrack(a).catch(() => undefined);
+        if (v) await tx.camVideo.sender.replaceTrack(v).catch(() => undefined);
       }
       vadRef.current = new VadDuckingEngine();
       await vadRef.current.attachMic(stream);
@@ -591,12 +657,17 @@ export function useDuoRoom(roomCode: string) {
           remoteDescSetRef.current = true;
           await flushIce(pc);
 
+          // Ensure local camera tracks are on their transceivers before answering
+          // (replaceTrack, so it never alters the m-line order set by the offer).
+          const tx = transceiversRef.current;
           const local = localStreamRef.current;
-          if (local) {
-            for (const track of local.getTracks()) {
-              const has = pc.getSenders().some((s) => s.track?.id === track.id);
-              if (!has) pc.addTrack(track, local);
-            }
+          if (tx && local) {
+            const a = local.getAudioTracks()[0];
+            const v = local.getVideoTracks()[0];
+            if (a && tx.camAudio.sender.track !== a)
+              await tx.camAudio.sender.replaceTrack(a).catch(() => undefined);
+            if (v && tx.camVideo.sender.track !== v)
+              await tx.camVideo.sender.replaceTrack(v).catch(() => undefined);
           }
 
           const answer = await pc.createAnswer();
@@ -938,15 +1009,13 @@ export function useDuoRoom(roomCode: string) {
   }, []);
 
   const stopScreenShare = useCallback(() => {
-    const pc = pcRef.current;
-    for (const sender of screenSendersRef.current) {
-      try {
-        pc?.removeTrack(sender);
-      } catch {
-        /* ignore */
-      }
+    // Detach from the fixed screen transceivers via replaceTrack(null) — no
+    // removeTrack, so NO renegotiation and no m-line churn.
+    const tx = transceiversRef.current;
+    if (tx) {
+      void tx.screenVideo.sender.replaceTrack(null).catch(() => undefined);
+      void tx.screenAudio.sender.replaceTrack(null).catch(() => undefined);
     }
-    screenSendersRef.current = [];
     screenStreamRef.current?.getTracks().forEach((t) => t.stop());
     screenStreamRef.current = null;
     if (screenVideoRef.current) {
@@ -961,12 +1030,15 @@ export function useDuoRoom(roomCode: string) {
     }
     update({ sharing: false, screenPreviewKey: Date.now() });
     sendApp({ type: "screen.stop" });
-    if (isInitiatorRef.current) void createAndSendOffer();
-  }, [createAndSendOffer, sendApp, update]);
+  }, [sendApp, update]);
 
   const startScreenShare = useCallback(async () => {
+    // getDisplayMedia does not exist in mobile browsers — screen capture from a
+    // phone is impossible on the web. Tell the user instead of silently failing.
     if (!navigator.mediaDevices?.getDisplayMedia) {
-      update({ status: "Screen share not supported here" });
+      update({
+        status: "Screen sharing works on desktop only — your partner can share to you",
+      });
       return;
     }
     try {
@@ -1006,27 +1078,27 @@ export function useDuoRoom(roomCode: string) {
         window.setTimeout(() => bindLocalScreenPreview(), 500);
       });
 
-      const pc = ensurePc();
-      const senders: RTCRtpSender[] = [];
-      for (const track of screen.getTracks()) {
-        senders.push(pc.addTrack(track, screen));
+      // Swap the screen tracks onto their fixed transceivers — replaceTrack means
+      // the partner sees it flow WITHOUT a renegotiation (no blinking).
+      ensurePc();
+      const tx = transceiversRef.current;
+      if (tx) {
+        const sv = screen.getVideoTracks()[0];
+        const sa = screen.getAudioTracks()[0];
+        if (sv) await tx.screenVideo.sender.replaceTrack(sv).catch(() => undefined);
+        if (sa) await tx.screenAudio.sender.replaceTrack(sa).catch(() => undefined);
       }
-      screenSendersRef.current = senders;
       if (videoTrack) {
         videoTrack.onended = () => {
           stopScreenShare();
           update({ cinemaSource: "youtube" });
         };
       }
-      if (isInitiatorRef.current || partnerIdRef.current) {
-        void createAndSendOffer();
-      }
     } catch {
       update({ status: "Screen share cancelled" });
     }
   }, [
     bindLocalScreenPreview,
-    createAndSendOffer,
     ensurePc,
     sendApp,
     stopScreenShare,
