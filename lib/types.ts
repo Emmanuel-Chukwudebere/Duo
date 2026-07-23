@@ -38,7 +38,15 @@ export type DuoAppMessage =
   | { type: "dinner.flip"; cardId: string; flipped: boolean }
   | { type: "dinner.deal"; cards: DinnerCard[] }
   | { type: "screen.start" }
-  | { type: "screen.stop" };
+  | { type: "screen.stop" }
+  | { type: "room.sync_request" }
+  | {
+      type: "room.sync_state";
+      mode: StageMode;
+      cinemaSource: CinemaSource;
+      ytVideoId: string | null;
+      ytTitle: string;
+    };
 
 export interface DinnerCard {
   id: string;

@@ -17,8 +17,10 @@ const ICE: RTCConfiguration = {
   iceServers: [
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" },
+    { urls: "stun:stun2.l.google.com:19302" },
+    { urls: "stun:stun3.l.google.com:19302" },
+    { urls: "stun:stun4.l.google.com:19302" },
     { urls: "stun:stun.cloudflare.com:3478" },
-    // Public demo TURN — helps when STUN alone fails (symmetric NAT)
     {
       urls: "turn:openrelay.metered.ca:80",
       username: "openrelayproject",
@@ -30,7 +32,7 @@ const ICE: RTCConfiguration = {
       credential: "openrelayproject",
     },
   ],
-  iceCandidatePoolSize: 8,
+  iceCandidatePoolSize: 10,
 };
 
 type SignalMsg = {
@@ -97,6 +99,9 @@ export function useDuoRoom(roomCode: string) {
     };
   });
 
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const dcRef = useRef<RTCDataChannel | null>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
@@ -113,16 +118,20 @@ export function useDuoRoom(roomCode: string) {
   const partnerIdRef = useRef<string | null>(null);
   const iceQueueRef = useRef<RTCIceCandidateInit[]>([]);
   const remoteDescSetRef = useRef(false);
-  const connectAttemptedRef = useRef<string | null>(null);
   const appHandlers = useRef(new Set<(msg: DuoAppMessage) => void>());
   const expectRemoteScreenRef = useRef(false);
+  const processedMsgIdsRef = useRef<Set<string>>(new Set());
 
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
   const screenVideoRef = useRef<HTMLVideoElement | null>(null);
 
   const update = useCallback((patch: Partial<DuoRoomState>) => {
-    setState((s) => ({ ...s, ...patch }));
+    setState((s) => {
+      const next = { ...s, ...patch };
+      stateRef.current = next;
+      return next;
+    });
   }, []);
 
   const broadcastSignal = useCallback((payload: SignalMsg) => {
@@ -137,17 +146,17 @@ export function useDuoRoom(roomCode: string) {
 
   const attachRemoteCam = useCallback((track: MediaStreamTrack) => {
     const cam = remoteCamStreamRef.current;
-    if (cam.getTracks().some((t) => t.id === track.id)) return;
-    // Replace same-kind track if renegotiating
-    cam.getTracks()
-      .filter((t) => t.kind === track.kind)
-      .forEach((t) => {
-        cam.removeTrack(t);
-      });
-    cam.addTrack(track);
+    if (!cam.getTracks().some((t) => t.id === track.id)) {
+      cam.getTracks()
+        .filter((t) => t.kind === track.kind)
+        .forEach((t) => cam.removeTrack(t));
+      cam.addTrack(track);
+    }
     const el = remoteVideoRef.current;
     if (el) {
-      el.srcObject = cam;
+      if (el.srcObject !== cam) {
+        el.srcObject = cam;
+      }
       el.muted = false;
       void el.play().catch(() => undefined);
     }
@@ -172,9 +181,31 @@ export function useDuoRoom(roomCode: string) {
   }, []);
 
   const sendApp = useCallback((msg: DuoAppMessage) => {
+    const msgWithId = {
+      ...msg,
+      _id: `${peerIdRef.current}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    };
+
+    // 1. Send over WebRTC DataChannel if open
     const dc = dcRef.current;
+    let sentViaDc = false;
     if (dc && dc.readyState === "open") {
-      dc.send(encodeAppMessage(msg));
+      try {
+        dc.send(encodeAppMessage(msgWithId));
+        sentViaDc = true;
+      } catch {
+        /* ignore */
+      }
+    }
+
+    // 2. Fallback / broadcast via Supabase Realtime so messages are guaranteed to reach peer
+    const ch = channelRef.current;
+    if (ch) {
+      void ch.send({
+        type: "broadcast",
+        event: "app-message",
+        payload: { from: peerIdRef.current, msg: msgWithId },
+      });
     }
   }, []);
 
@@ -186,8 +217,34 @@ export function useDuoRoom(roomCode: string) {
   }, []);
 
   const dispatchApp = useCallback(
-    (msg: DuoAppMessage, fromRemote: boolean) => {
+    (msg: DuoAppMessage & { _id?: string }, fromRemote: boolean) => {
+      if (msg._id) {
+        if (processedMsgIdsRef.current.has(msg._id)) return;
+        processedMsgIdsRef.current.add(msg._id);
+        if (processedMsgIdsRef.current.size > 200) {
+          const arr = Array.from(processedMsgIdsRef.current);
+          processedMsgIdsRef.current = new Set(arr.slice(50));
+        }
+      }
+
       if (fromRemote) {
+        if (msg.type === "room.sync_request") {
+          sendApp({
+            type: "room.sync_state",
+            mode: stateRef.current.mode,
+            cinemaSource: stateRef.current.cinemaSource,
+            ytVideoId: stateRef.current.ytVideoId,
+            ytTitle: stateRef.current.ytTitle,
+          });
+        }
+        if (msg.type === "room.sync_state") {
+          update({
+            mode: msg.mode,
+            cinemaSource: msg.cinemaSource,
+            ytVideoId: msg.ytVideoId,
+            ytTitle: msg.ytTitle,
+          });
+        }
         if (msg.type === "mode.switch") update({ mode: msg.mode });
         if (msg.type === "cinema.source") update({ cinemaSource: msg.source });
         if (msg.type === "yt.load")
@@ -223,7 +280,7 @@ export function useDuoRoom(roomCode: string) {
       }
       for (const h of appHandlers.current) h(msg);
     },
-    [update],
+    [sendApp, update],
   );
 
   const setupDataChannel = useCallback(
@@ -232,6 +289,7 @@ export function useDuoRoom(roomCode: string) {
       dc.binaryType = "arraybuffer";
       dc.onopen = () => {
         update({ status: "Connected with partner" });
+        sendApp({ type: "room.sync_request" });
       };
       dc.onclose = () => {
         if (partnerIdRef.current) {
@@ -243,7 +301,7 @@ export function useDuoRoom(roomCode: string) {
         if (msg) dispatchApp(msg, true);
       };
     },
-    [dispatchApp, update],
+    [dispatchApp, sendApp, update],
   );
 
   const ensurePc = useCallback(() => {
@@ -253,25 +311,26 @@ export function useDuoRoom(roomCode: string) {
     remoteDescSetRef.current = false;
     iceQueueRef.current = [];
 
+    pc.onnegotiationneeded = () => {
+      if (
+        isInitiatorRef.current &&
+        partnerIdRef.current &&
+        pc.signalingState === "stable" &&
+        !makingOffer.current
+      ) {
+        void createAndSendOffer();
+      }
+    };
+
     pc.ontrack = (ev) => {
       const track = ev.track;
-
-      // Prefer the stream from the peer if provided
-      if (ev.streams[0] && track.kind === "video" && !expectRemoteScreenRef.current) {
-        const stream = ev.streams[0];
-        remoteCamStreamRef.current = stream;
-        if (remoteVideoRef.current) {
-          remoteVideoRef.current.srcObject = stream;
-          void remoteVideoRef.current.play().catch(() => undefined);
-        }
-        update({ status: "Connected with partner" });
-        return;
-      }
 
       if (track.kind === "audio") {
         if (expectRemoteScreenRef.current) {
           const screen = remoteScreenStreamRef.current;
-          if (!screen.getAudioTracks().includes(track)) screen.addTrack(track);
+          if (!screen.getAudioTracks().some((t) => t.id === track.id)) {
+            screen.addTrack(track);
+          }
         } else {
           attachRemoteCam(track);
         }
@@ -311,8 +370,7 @@ export function useDuoRoom(roomCode: string) {
       } else if (st === "connecting") {
         update({ status: "Connecting media…" });
       } else if (st === "failed") {
-        update({ status: "Connection failed — try reloading both tabs" });
-        // Restart ICE
+        update({ status: "Connection failed — retrying network…" });
         try {
           void pc.restartIce();
         } catch {
@@ -324,7 +382,10 @@ export function useDuoRoom(roomCode: string) {
     };
 
     pc.oniceconnectionstatechange = () => {
-      if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
+      if (
+        pc.iceConnectionState === "connected" ||
+        pc.iceConnectionState === "completed"
+      ) {
         update({ status: "Connected with partner" });
       }
       if (pc.iceConnectionState === "failed") {
@@ -355,7 +416,7 @@ export function useDuoRoom(roomCode: string) {
     return pc;
   }, [attachRemoteCam, broadcastSignal, setupDataChannel, update]);
 
-  /** Explicit offer — more reliable than only negotiationneeded */
+  /** Explicit offer */
   const createAndSendOffer = useCallback(async () => {
     const pc = ensurePc();
     const to = partnerIdRef.current;
@@ -364,7 +425,6 @@ export function useDuoRoom(roomCode: string) {
 
     try {
       makingOffer.current = true;
-      // Ensure local tracks are attached
       const local = localStreamRef.current;
       if (local) {
         const senders = pc.getSenders();
@@ -393,7 +453,7 @@ export function useDuoRoom(roomCode: string) {
       update({ status: "Connecting media…" });
     } catch (e) {
       console.error("createOffer failed", e);
-      update({ status: "Could not start call — reload both sides" });
+      update({ status: "Could not start call — retrying…" });
     } finally {
       makingOffer.current = false;
     }
@@ -461,7 +521,6 @@ export function useDuoRoom(roomCode: string) {
 
       try {
         if (msg.type === "ready") {
-          // Non-initiator is ready — initiator should offer
           if (isInitiatorRef.current) {
             void createAndSendOffer();
           }
@@ -471,7 +530,6 @@ export function useDuoRoom(roomCode: string) {
         if (msg.type === "offer" && msg.sdp) {
           const offerCollision =
             makingOffer.current || pc.signalingState !== "stable";
-          // Perfect negotiation: impolite peer ignores colliding offers
           const polite = !isInitiatorRef.current;
           ignoreOffer.current = !polite && offerCollision;
           if (ignoreOffer.current) return;
@@ -487,7 +545,6 @@ export function useDuoRoom(roomCode: string) {
           remoteDescSetRef.current = true;
           await flushIce(pc);
 
-          // Ensure we send our media
           const local = localStreamRef.current;
           if (local) {
             for (const track of local.getTracks()) {
@@ -527,7 +584,7 @@ export function useDuoRoom(roomCode: string) {
         }
       } catch (e) {
         console.error("signal error", e);
-        update({ status: "Signaling error — reload both tabs" });
+        update({ status: "Signaling error — retrying connection…" });
       }
     },
     [broadcastSignal, createAndSendOffer, ensurePc, flushIce, update],
@@ -552,13 +609,28 @@ export function useDuoRoom(roomCode: string) {
           void handleSignal(payload as SignalMsg);
         });
 
+        channel.on("broadcast", { event: "app-message" }, ({ payload }) => {
+          if (
+            payload &&
+            typeof payload === "object" &&
+            "msg" in payload &&
+            "from" in payload
+          ) {
+            if (payload.from !== peerIdRef.current) {
+              dispatchApp(
+                payload.msg as DuoAppMessage & { _id?: string },
+                true,
+              );
+            }
+          }
+        });
+
         channel.on("presence", { event: "sync" }, () => {
           const stateMap = channel.presenceState() as Record<
             string,
             { peerId: string; role: PeerRole; name: string }[]
           >;
           const peers = Object.values(stateMap).flat();
-          // Dedupe by peerId
           const unique = new Map<string, (typeof peers)[0]>();
           for (const p of peers) unique.set(p.peerId, p);
           const list = [...unique.values()];
@@ -572,9 +644,9 @@ export function useDuoRoom(roomCode: string) {
           if (others[0]) {
             const partnerId = others[0].peerId;
             partnerIdRef.current = partnerId;
-            // Deterministic initiator: lower peerId offers
             isInitiatorRef.current = peerId < partnerId;
-            const isHost = list.find((p) => p.peerId === peerId)?.role === "host";
+            const isHost =
+              list.find((p) => p.peerId === peerId)?.role === "host";
 
             update({
               partnerPresent: true,
@@ -585,30 +657,26 @@ export function useDuoRoom(roomCode: string) {
                 : "Partner joined — starting camera…",
             });
 
-            // Kick connection once per partner id
-            if (connectAttemptedRef.current !== partnerId) {
-              connectAttemptedRef.current = partnerId;
-              ensurePc();
-              if (localStreamRef.current) {
-                if (isInitiatorRef.current) {
-                  // Small delay so both sides finish subscribe + media
-                  window.setTimeout(() => {
-                    if (!cancelled && partnerIdRef.current === partnerId) {
-                      void createAndSendOffer();
-                    }
-                  }, 400);
-                } else {
-                  broadcastSignal({
-                    type: "ready",
-                    from: peerId,
-                    to: partnerId,
-                  });
-                }
+            ensurePc();
+            sendApp({ type: "room.sync_request" });
+
+            if (localStreamRef.current) {
+              if (isInitiatorRef.current) {
+                window.setTimeout(() => {
+                  if (!cancelled && partnerIdRef.current === partnerId) {
+                    void createAndSendOffer();
+                  }
+                }, 300);
+              } else {
+                broadcastSignal({
+                  type: "ready",
+                  from: peerId,
+                  to: partnerId,
+                });
               }
             }
           } else {
             partnerIdRef.current = null;
-            connectAttemptedRef.current = null;
             isInitiatorRef.current = false;
             remoteDescSetRef.current = false;
             update({
@@ -691,11 +759,37 @@ export function useDuoRoom(roomCode: string) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomCode]);
 
+  // Heartbeat / self-healing signaling retry when partner present but media not connected
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (!partnerIdRef.current) return;
+      const pc = pcRef.current;
+      const connState = pc?.connectionState;
+      if (connState !== "connected") {
+        if (isInitiatorRef.current) {
+          if (pc && pc.signalingState === "stable" && !makingOffer.current) {
+            void createAndSendOffer();
+          }
+        } else {
+          broadcastSignal({
+            type: "ready",
+            from: peerIdRef.current,
+            to: partnerIdRef.current,
+          });
+        }
+      }
+    }, 2500);
+
+    return () => clearInterval(interval);
+  }, [broadcastSignal, createAndSendOffer]);
+
   // Re-bind remote video element if ref mounts late
   useEffect(() => {
     const cam = remoteCamStreamRef.current;
     if (remoteVideoRef.current && cam.getTracks().length > 0) {
-      remoteVideoRef.current.srcObject = cam;
+      if (remoteVideoRef.current.srcObject !== cam) {
+        remoteVideoRef.current.srcObject = cam;
+      }
       void remoteVideoRef.current.play().catch(() => undefined);
     }
   });
@@ -797,19 +891,17 @@ export function useDuoRoom(roomCode: string) {
         }
       }
 
-      // Switch UI to Cinema → Screen first so the <video> mounts
       update({
         sharing: true,
         cinemaSource: "screen",
         mode: "cinema",
-        status: "Sharing screen — you should see your preview",
+        status: "Sharing screen — preview active",
         screenPreviewKey: Date.now(),
       });
       sendApp({ type: "screen.start" });
       sendApp({ type: "mode.switch", mode: "cinema" });
       sendApp({ type: "cinema.source", source: "screen" });
 
-      // Bind preview now and again after paint (ref may be null until Cinema mounts)
       bindLocalScreenPreview();
       requestAnimationFrame(() => {
         bindLocalScreenPreview();
@@ -847,7 +939,6 @@ export function useDuoRoom(roomCode: string) {
 
   const loadYoutube = useCallback(
     (videoId: string, title?: string) => {
-      // Stay in the current stage (Dinner soundtrack vs Cinema) — never force Film
       update({ ytVideoId: videoId, ytTitle: title || "" });
       sendApp({ type: "yt.load", videoId, title });
     },
@@ -870,7 +961,6 @@ export function useDuoRoom(roomCode: string) {
   const setDuckingMode = useCallback(
     (mode: DuckingMode) => {
       update({ duckingMode: mode });
-      // Ensure engine exists even if mic attach failed earlier
       if (!vadRef.current) {
         vadRef.current = new VadDuckingEngine();
         vadRef.current.subscribe((level, speaking) => {
@@ -882,10 +972,6 @@ export function useDuoRoom(roomCode: string) {
     [update],
   );
 
-  /**
-   * Manual "Talk" — duck YouTube / media volume ~2s so conversation is clear.
-   * Works even when AUTO duck is off, and without mic if needed.
-   */
   const triggerTalk = useCallback(() => {
     if (!vadRef.current) {
       vadRef.current = new VadDuckingEngine();
@@ -893,9 +979,7 @@ export function useDuoRoom(roomCode: string) {
         update({ duckLevel: level, localSpeaking: speaking });
       });
     }
-    // If auto was off, still allow manual duck (forceDuck ignores auto flag)
     vadRef.current.forceDuck(2200);
-    // Also broadcast speaking so partner ducks too if their auto is on
     sendApp({ type: "speaking", active: true });
     window.setTimeout(() => {
       sendApp({ type: "speaking", active: false });
@@ -937,7 +1021,6 @@ export function useDuoRoom(roomCode: string) {
     sendReaction,
     isYtController,
     duckLevel: state.duckLevel,
-    /** Call after the screen <video> mounts to attach local/remote stream */
     bindLocalScreenPreview,
     getLocalScreenStream: () => screenStreamRef.current,
     getRemoteScreenStream: () => remoteScreenStreamRef.current,
