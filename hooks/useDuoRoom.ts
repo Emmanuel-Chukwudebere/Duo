@@ -1333,6 +1333,66 @@ export function useDuoRoom(roomCode: string) {
     [dispatchApp, sendApp],
   );
 
+  // Live WebRTC diagnostics for the on-screen Connection info panel. Lets us see,
+  // from the ACTUAL failing device, whether relay candidates exist and whether
+  // inbound video/audio bytes are really arriving — instead of guessing.
+  const getDiagnostics = useCallback(async () => {
+    const pc = pcRef.current;
+    const remoteCam = remoteCamStreamRef.current;
+    const base = {
+      partnerPresent: stateRef.current.partnerPresent,
+      role: stateRef.current.role,
+      isInitiator: isInitiatorRef.current,
+      connection: pc?.connectionState ?? "no-pc",
+      ice: pc?.iceConnectionState ?? "no-pc",
+      signaling: pc?.signalingState ?? "no-pc",
+      dataChannel: dcRef.current?.readyState ?? "none",
+      remoteCamTracks: remoteCam?.getTracks().length ?? 0,
+      remoteVideoDims: remoteVideoRef.current
+        ? `${remoteVideoRef.current.videoWidth}x${remoteVideoRef.current.videoHeight}`
+        : "no-el",
+      remoteMuted: remoteVideoRef.current?.muted ?? null,
+    };
+    if (!pc) return { ...base, note: "No peer connection yet" };
+
+    let inboundVideo = 0;
+    let inboundAudio = 0;
+    let candidatePair = "";
+    let localType = "";
+    let remoteType = "";
+    try {
+      const stats = await pc.getStats();
+      stats.forEach((r) => {
+        if (r.type === "inbound-rtp" && r.kind === "video")
+          inboundVideo += r.bytesReceived || 0;
+        if (r.type === "inbound-rtp" && r.kind === "audio")
+          inboundAudio += r.bytesReceived || 0;
+        if (r.type === "candidate-pair" && r.state === "succeeded" && r.nominated) {
+          candidatePair = "succeeded";
+        }
+      });
+      stats.forEach((r) => {
+        if (r.type === "local-candidate" && candidatePair && !localType)
+          localType = r.candidateType || "";
+        if (r.type === "remote-candidate" && candidatePair && !remoteType)
+          remoteType = r.candidateType || "";
+      });
+    } catch {
+      /* getStats unsupported */
+    }
+    return {
+      ...base,
+      inboundVideoBytes: inboundVideo,
+      inboundAudioBytes: inboundAudio,
+      videoFlowing: inboundVideo > 0,
+      audioFlowing: inboundAudio > 0,
+      candidatePair: candidatePair || "none-succeeded",
+      pathUsingRelay: localType === "relay" || remoteType === "relay",
+      localCandidateType: localType || "?",
+      remoteCandidateType: remoteType || "?",
+    };
+  }, []);
+
   const setDuckingMode = useCallback(
     (mode: DuckingMode) => {
       update({ duckingMode: mode });
@@ -1442,6 +1502,7 @@ export function useDuoRoom(roomCode: string) {
     triggerTalk,
     sendReaction,
     unmuteRemote,
+    getDiagnostics,
     resync,
     isYtController,
     duckLevel: state.duckLevel,

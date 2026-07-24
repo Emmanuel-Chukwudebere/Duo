@@ -74,6 +74,7 @@ export function RoomShell({ code }: { code: string }) {
   const [bubblesCollapsed, setBubblesCollapsed] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
   const [inviteDismissed, setInviteDismissed] = useState(false);
+  const [diag, setDiag] = useState<Record<string, unknown> | null>(null);
   const stageConstraintsRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -601,6 +602,56 @@ export function RoomShell({ code }: { code: string }) {
         </div>
       </main>
 
+      {/* Connection diagnostics — screenshot this to debug no-media issues */}
+      {diag ? (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md"
+          onClick={() => setDiag(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative w-full max-w-sm rounded-2xl border border-white/12 bg-[#12141D] p-5 shadow-2xl"
+          >
+            <button
+              type="button"
+              onClick={() => setDiag(null)}
+              className="absolute top-3 right-3 text-white/50 hover:text-white p-1"
+            >
+              <X size={18} />
+            </button>
+            <h3 className="text-sm font-semibold mb-3">Connection info</h3>
+            <div className="space-y-1 font-mono text-[11px]">
+              {Object.entries(diag).map(([k, v]) => {
+                const bad =
+                  (k === "videoFlowing" && v === false) ||
+                  (k === "audioFlowing" && v === false) ||
+                  (k === "connection" && v !== "connected") ||
+                  (k === "candidatePair" && v !== "succeeded");
+                return (
+                  <div key={k} className="flex justify-between gap-3">
+                    <span className="text-[#9CA3AF]">{k}</span>
+                    <span
+                      className={
+                        bad ? "text-rose-400" : "text-emerald-300/90"
+                      }
+                    >
+                      {String(v)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+            <button
+              type="button"
+              onClick={async () => setDiag(await room.getDiagnostics())}
+              className="mt-4 w-full py-2 rounded-full bg-white/[0.06] border border-white/12 text-xs font-medium"
+            >
+              Refresh
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {state.localSpeaking || room.duckLevel < 0.95 ? (
         <div className="fixed bottom-[4.75rem] left-1/2 -translate-x-1/2 z-40 pointer-events-none hidden sm:block">
           <div className="rounded-full border border-white/10 bg-[#12141D]/95 px-3 py-1 text-[10px] text-[#FFB35C] tabular-nums">
@@ -790,6 +841,15 @@ export function RoomShell({ code }: { code: string }) {
                   onClick={() => {
                     setShowQrModal(true);
                     close();
+                  }}
+                />
+                <div className="my-1 h-px bg-white/10" />
+                <PopoverItem
+                  icon={<RotateCcw size={16} />}
+                  label="Connection info"
+                  onClick={async () => {
+                    close();
+                    setDiag(await room.getDiagnostics());
                   }}
                 />
               </div>
