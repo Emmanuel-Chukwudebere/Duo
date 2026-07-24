@@ -144,6 +144,9 @@ export function useDuoRoom(roomCode: string) {
   // screen transceivers so sharing a video reuses the screen-share pipeline.
   const fileVideoElRef = useRef<HTMLVideoElement | null>(null);
   const fileObjectUrlRef = useRef<string | null>(null);
+  // iOS-fallback video-file capture: canvas draw loop + WebAudio for audio.
+  const fileCanvasRafRef = useRef<number>(0);
+  const fileAudioCtxRef = useRef<AudioContext | null>(null);
   // Lazily created on the client only. `new MediaStream()` does not exist during
   // server-side render, so initializing these inline would 500 the room page on a
   // direct link/QR load (exactly how a partner joins). All consumers of these refs
@@ -166,8 +169,11 @@ export function useDuoRoom(roomCode: string) {
   const appHandlers = useRef(new Set<(msg: DuoAppMessage) => void>());
   const processedMsgIdsRef = useRef<Set<string>>(new Set());
   const iceConfigRef = useRef<RTCConfiguration>(DEFAULT_ICE);
-  // Set true when we're EXPECTING the partner's next inbound video to be a screen
-  // share (they sent screen.start). Routes ontrack to the screen vs cam stream.
+  // The MediaStream id of the partner's screen share (from their screen.start).
+  // ontrack routes by stream identity — race-proof, unlike a boolean flag which
+  // mis-routed the screen into the camera bubble when messages/tracks raced.
+  const remoteScreenStreamIdRef = useRef<string | null>(null);
+  // Fallback flag for peers that don't send a streamId (older clients).
   const expectRemoteScreenRef = useRef(false);
   // Screen-share senders, created once via addTrack. To stop we replaceTrack(null)
   // and to restart replaceTrack(track) — never removeTrack — so the SDP m-line
@@ -177,6 +183,9 @@ export function useDuoRoom(roomCode: string) {
     video: RTCRtpSender | null;
     audio: RTCRtpSender | null;
   }>({ video: null, audio: null });
+  // The msid (stream id) the peer's ontrack sees for our screen share. Set at the
+  // first addTrack; reused for later shares (replaceTrack keeps the original msid).
+  const screenMsidRef = useRef<string | null>(null);
 
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -357,8 +366,10 @@ export function useDuoRoom(roomCode: string) {
           });
         }
         if (msg.type === "screen.start") {
-          // The actual video arrives on the screen transceiver (ontrack); this
-          // just flips the stage to cinema so the incoming frame has somewhere to go.
+          // Record which inbound stream id is the screen so ontrack routes it to
+          // the cinema surface (not the camera bubble). Also set the fallback flag.
+          if (msg.streamId) remoteScreenStreamIdRef.current = msg.streamId;
+          expectRemoteScreenRef.current = true;
           update({
             remoteSharing: true,
             mode: "cinema",
@@ -366,6 +377,8 @@ export function useDuoRoom(roomCode: string) {
           });
         }
         if (msg.type === "screen.stop") {
+          remoteScreenStreamIdRef.current = null;
+          expectRemoteScreenRef.current = false;
           // Sender detached via replaceTrack(null); clear our view of it. Don't
           // stop() the remote tracks — the transceiver is reused for the next share.
           remoteScreenStreamRef.current
@@ -432,45 +445,41 @@ export function useDuoRoom(roomCode: string) {
       }
     };
 
-    // Route incoming tracks: if we were told the partner is screen-sharing, the
-    // next inbound video is the screen; otherwise it's the camera/mic.
+    // Route incoming tracks by STREAM IDENTITY (race-proof): the sender added the
+    // screen tracks to a stream whose id it signalled via screen.start. If this
+    // track belongs to that stream → screen; else → camera. Falls back to the
+    // expect-flag only when no streamId was signalled (older clients).
     pc.ontrack = (ev) => {
       const track = ev.track;
+      const streamId = ev.streams[0]?.id;
+      const isScreen =
+        (remoteScreenStreamIdRef.current != null &&
+          streamId === remoteScreenStreamIdRef.current) ||
+        (remoteScreenStreamIdRef.current == null && expectRemoteScreenRef.current);
 
-      if (track.kind === "audio") {
-        if (expectRemoteScreenRef.current) {
-          const screen = remoteScreenStreamRef.current;
-          if (!screen.getAudioTracks().some((t) => t.id === track.id)) {
-            screen.addTrack(track);
-          }
-        } else {
-          attachRemoteCam(track);
+      if (isScreen) {
+        const screen = remoteScreenStreamRef.current;
+        screen
+          .getTracks()
+          .filter((t) => t.kind === track.kind)
+          .forEach((t) => screen.removeTrack(t));
+        screen.addTrack(track);
+        expectRemoteScreenRef.current = false;
+        if (track.kind === "video" && screenVideoRef.current) {
+          screenVideoRef.current.srcObject = screen;
+          void screenVideoRef.current.play().catch(() => undefined);
         }
+        update({
+          remoteSharing: true,
+          mode: "cinema",
+          cinemaSource: "screen",
+        });
         return;
       }
 
-      if (track.kind === "video") {
-        if (expectRemoteScreenRef.current) {
-          const screen = remoteScreenStreamRef.current;
-          screen.getVideoTracks().forEach((t) => {
-            screen.removeTrack(t);
-          });
-          screen.addTrack(track);
-          expectRemoteScreenRef.current = false;
-          if (screenVideoRef.current) {
-            screenVideoRef.current.srcObject = screen;
-            void screenVideoRef.current.play().catch(() => undefined);
-          }
-          update({
-            remoteSharing: true,
-            mode: "cinema",
-            cinemaSource: "screen",
-          });
-        } else {
-          attachRemoteCam(track);
-          update({ status: "Connected with partner" });
-        }
-      }
+      // Camera / mic.
+      attachRemoteCam(track);
+      if (track.kind === "video") update({ status: "Connected with partner" });
     };
 
     pc.onconnectionstatechange = () => {
@@ -1058,6 +1067,9 @@ export function useDuoRoom(roomCode: string) {
       const sa = stream.getAudioTracks()[0] || null;
       const senders = screenSendersRef.current;
 
+      // Remember the msid the peer will see (set once, at first addTrack).
+      if (!screenMsidRef.current) screenMsidRef.current = stream.id;
+
       if (senders.video) {
         await senders.video.replaceTrack(sv).catch(() => undefined);
       } else if (sv) {
@@ -1068,6 +1080,9 @@ export function useDuoRoom(roomCode: string) {
       } else if (sa) {
         senders.audio = pc.addTrack(sa, stream);
       }
+
+      // Tell the peer which inbound stream id is the screen (race-proof routing).
+      sendApp({ type: "screen.start", streamId: screenMsidRef.current });
 
       // Apply the current quality cap to the screen video sender.
       if (senders.video) {
@@ -1088,7 +1103,7 @@ export function useDuoRoom(roomCode: string) {
         void createAndSendOffer();
       }
     },
-    [createAndSendOffer, ensurePc],
+    [createAndSendOffer, ensurePc, sendApp],
   );
 
   const stopScreenShare = useCallback(() => {
@@ -1099,6 +1114,15 @@ export function useDuoRoom(roomCode: string) {
     void senders.audio?.replaceTrack(null).catch(() => undefined);
     screenStreamRef.current?.getTracks().forEach((t) => t.stop());
     screenStreamRef.current = null;
+    // Tear down the iOS canvas-capture loop + WebAudio graph, if used.
+    if (fileCanvasRafRef.current) {
+      cancelAnimationFrame(fileCanvasRafRef.current);
+      fileCanvasRafRef.current = 0;
+    }
+    if (fileAudioCtxRef.current) {
+      void fileAudioCtxRef.current.close().catch(() => undefined);
+      fileAudioCtxRef.current = null;
+    }
     // Tear down a shared video file, if that's what was playing.
     if (fileVideoElRef.current) {
       try {
@@ -1162,7 +1186,7 @@ export function useDuoRoom(roomCode: string) {
         status: "Sharing screen — preview active",
         screenPreviewKey: Date.now(),
       });
-      sendApp({ type: "screen.start" });
+      // screen.start (with the msid) is sent by pushScreenStream below.
       sendApp({ type: "mode.switch", mode: "cinema" });
       sendApp({ type: "cinema.source", source: "screen" });
 
@@ -1216,19 +1240,57 @@ export function useDuoRoom(roomCode: string) {
         });
         await vid.play().catch(() => undefined);
 
-        // captureStream is unreliable on iOS Safari — try, and fall back cleanly.
+        // 1) Try native element captureStream (desktop/Android — carries audio).
         type Capturable = HTMLVideoElement & {
           captureStream?: () => MediaStream;
           mozCaptureStream?: () => MediaStream;
         };
         const cap = vid as Capturable;
-        const stream = cap.captureStream
-          ? cap.captureStream()
-          : cap.mozCaptureStream
-            ? cap.mozCaptureStream()
-            : null;
+        let stream: MediaStream | null =
+          cap.captureStream?.() ?? cap.mozCaptureStream?.() ?? null;
+
+        // 2) iOS Safari has no element captureStream → CANVAS fallback: draw video
+        //    frames to a canvas and capture that (video track), plus best-effort
+        //    WebAudio for the audio track (may be silent on iOS — picture still works).
         if (!stream || stream.getVideoTracks().length === 0) {
-          throw new Error("captureStream unsupported");
+          const canvas = document.createElement("canvas");
+          canvas.width = vid.videoWidth || 1280;
+          canvas.height = vid.videoHeight || 720;
+          const cctx = canvas.getContext("2d");
+          const draw = () => {
+            if (!fileVideoElRef.current) return;
+            try {
+              cctx?.drawImage(vid, 0, 0, canvas.width, canvas.height);
+            } catch {
+              /* frame not ready */
+            }
+            fileCanvasRafRef.current = requestAnimationFrame(draw);
+          };
+          draw();
+          type CanvasCap = HTMLCanvasElement & {
+            captureStream?: (fps?: number) => MediaStream;
+          };
+          const canvasStream = (canvas as CanvasCap).captureStream?.(30);
+          if (!canvasStream) throw new Error("captureStream unsupported");
+          stream = canvasStream;
+          // Best-effort audio via WebAudio (iOS may yield silence — acceptable).
+          try {
+            const Ctx =
+              window.AudioContext ||
+              (window as unknown as { webkitAudioContext: typeof AudioContext })
+                .webkitAudioContext;
+            const actx = new Ctx();
+            fileAudioCtxRef.current = actx;
+            if (actx.state === "suspended") await actx.resume();
+            const src = actx.createMediaElementSource(vid);
+            const dest = actx.createMediaStreamDestination();
+            src.connect(dest);
+            src.connect(actx.destination); // keep it audible locally
+            const at = dest.stream.getAudioTracks()[0];
+            if (at) stream.addTrack(at);
+          } catch {
+            /* audio capture unsupported — share video only */
+          }
         }
         screenStreamRef.current = stream;
 
@@ -1239,7 +1301,7 @@ export function useDuoRoom(roomCode: string) {
           status: "Sharing a video — partner is watching",
           screenPreviewKey: Date.now(),
         });
-        sendApp({ type: "screen.start" });
+        // screen.start (with the msid) is sent by pushScreenStream below.
         sendApp({ type: "mode.switch", mode: "cinema" });
         sendApp({ type: "cinema.source", source: "screen" });
 
@@ -1257,7 +1319,15 @@ export function useDuoRoom(roomCode: string) {
           update({ cinemaSource: "youtube" });
         };
       } catch (e) {
-        // Clean up a half-open attempt (e.g. iOS captureStream failure).
+        // Clean up a half-open attempt.
+        if (fileCanvasRafRef.current) {
+          cancelAnimationFrame(fileCanvasRafRef.current);
+          fileCanvasRafRef.current = 0;
+        }
+        if (fileAudioCtxRef.current) {
+          void fileAudioCtxRef.current.close().catch(() => undefined);
+          fileAudioCtxRef.current = null;
+        }
         if (fileObjectUrlRef.current) {
           URL.revokeObjectURL(fileObjectUrlRef.current);
           fileObjectUrlRef.current = null;
@@ -1266,7 +1336,7 @@ export function useDuoRoom(roomCode: string) {
         update({
           status:
             e instanceof Error && e.message === "captureStream unsupported"
-              ? "Sharing a video file isn't supported on this device (try Chrome desktop/Android)"
+              ? "This browser can't share a video file — try Chrome, Safari 11+, or Android"
               : "Couldn't share that video",
         });
       }

@@ -15,6 +15,10 @@ export class VadDuckingEngine {
   private ctx: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
   private source: MediaStreamAudioSourceNode | null = null;
+  /** A CLONED mic track fed to the analyser. On iOS Safari, routing the live
+   * WebRTC mic track through Web Audio silences it for the peer, so we analyse a
+   * clone and leave the original track untouched for the call. */
+  private monitorTrack: MediaStreamTrack | null = null;
   private raf = 0;
   private speechSince: number | null = null;
   private silenceSince: number | null = null;
@@ -87,7 +91,11 @@ export class VadDuckingEngine {
     if (this.ctx.state === "suspended") await this.ctx.resume();
     this.analyser = this.ctx.createAnalyser();
     this.analyser.fftSize = 512;
-    this.source = this.ctx.createMediaStreamSource(stream);
+    // Analyse a CLONE so the real mic track stays clean for WebRTC (iOS Safari
+    // otherwise mutes the sent audio → partner gets 0 audio bytes).
+    this.monitorTrack = stream.getAudioTracks()[0]!.clone();
+    const monitorStream = new MediaStream([this.monitorTrack]);
+    this.source = this.ctx.createMediaStreamSource(monitorStream);
     this.source.connect(this.analyser);
     this.loop();
   }
@@ -104,6 +112,8 @@ export class VadDuckingEngine {
     } catch {
       /* ignore */
     }
+    this.monitorTrack?.stop();
+    this.monitorTrack = null;
     void this.ctx?.close();
     this.ctx = null;
     this.analyser = null;

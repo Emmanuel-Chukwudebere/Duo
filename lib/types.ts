@@ -39,7 +39,7 @@ export type DuoAppMessage =
   | { type: "game.sync"; gameId: GameId; state: unknown }
   | { type: "dinner.flip"; cardId: string; flipped: boolean }
   | { type: "dinner.deal"; cards: DinnerCard[] }
-  | { type: "screen.start" }
+  | { type: "screen.start"; streamId?: string }
   | { type: "screen.stop" }
   | { type: "media.state"; micOn: boolean; camOn: boolean }
   | { type: "room.sync_request" }
