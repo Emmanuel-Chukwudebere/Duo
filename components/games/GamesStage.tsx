@@ -286,7 +286,7 @@ export function GamesStage({
                   </span>
                 </div>
                 <p className="text-center text-[10px] text-[#9CA3AF]/70">
-                  Swipe left/right or use the buttons
+                  Use the buttons below
                 </p>
               </div>
             </div>
@@ -299,31 +299,31 @@ export function GamesStage({
   // ——— Picker: stack of games ———
   if (phase === "picker") {
     return (
-      <div className="absolute inset-0 flex flex-col p-3 sm:p-6 md:p-8 pb-24 sm:pb-8 overflow-hidden">
+      <div className="absolute inset-0 flex flex-col p-3 sm:p-6 md:p-8 pb-24 sm:pb-8 overflow-y-auto no-scrollbar">
         <div className="mb-3 sm:mb-4 flex items-start justify-between gap-3 shrink-0">
           <div>
             <div className="text-[10px] sm:text-xs tracking-wider text-[#8A5CF5] font-medium uppercase">
               Playful mode
             </div>
             <h2 className="text-xl sm:text-2xl font-semibold tracking-tight">
-              Swipe a game
+              Pick a game
             </h2>
             <p className="text-xs sm:text-sm text-[#9CA3AF] mt-1">
-              Right to play · Left to skip · Up for AI deal
+              Tap Play, Skip, or ✨ for an AI-dealt round
             </p>
           </div>
           <motion.button
             type="button"
             whileTap={{ scale: 0.96 }}
             onClick={reshuffleDeck}
-            className="control-chip px-3 py-2 text-xs min-h-[40px] inline-flex items-center gap-1.5"
+            className="control-chip px-3 py-2 text-xs min-h-[40px] inline-flex items-center gap-1.5 shrink-0"
           >
             <TwoToneIcon icon={RotateCcw} tone="muted" size={14} />
             Shuffle
           </motion.button>
         </div>
 
-        <div className="flex-1 flex flex-col items-center justify-center min-h-0">
+        <div className="flex-1 flex flex-col items-center justify-center min-h-0 py-2">
           {deck.length === 0 ? (
             <motion.button
               type="button"
@@ -334,11 +334,7 @@ export function GamesStage({
               Reset deck
             </motion.button>
           ) : (
-            <CardStack
-              items={pickerItems}
-              onSwipeTop={onPickerSwipe}
-              disabled={dealing}
-            />
+            <CardStack items={pickerItems} />
           )}
         </div>
 

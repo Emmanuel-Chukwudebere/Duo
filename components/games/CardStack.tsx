@@ -53,13 +53,10 @@ export function CardStack({
               transition={{ type: "spring", stiffness: 320, damping: 28 }}
             >
               {isTop ? (
-                <SwipeCard
-                  leftHint={item.leftHint}
-                  rightHint={item.rightHint}
-                  showHints={item.showHints !== false}
-                >
-                  {item.node}
-                </SwipeCard>
+                // Corner hint badges were swipe affordances; with swipe removed
+                // they only clutter/overlap the card, so they stay hidden. The
+                // action buttons below carry the labels.
+                <SwipeCard showHints={false}>{item.node}</SwipeCard>
               ) : (
                 <div className="absolute inset-0 rounded-3xl border border-white/10 bg-[#181B26] overflow-hidden pointer-events-none shadow-[0_8px_28px_rgba(0,0,0,0.35)]">
                   {item.node}
