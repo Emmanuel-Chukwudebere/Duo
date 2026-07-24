@@ -108,6 +108,17 @@ export function RoomShell({ code }: { code: string }) {
     return () => clearTimeout(t);
   }, [state.lastReaction]);
 
+  // Live-refresh the diagnostics panel while it's open (so it shows real-time
+  // behavior — e.g. bytes climbing, duck level changing when you talk).
+  useEffect(() => {
+    if (!diag) return;
+    const id = setInterval(async () => {
+      setDiag(await room.getDiagnostics());
+    }, 1500);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [diag !== null]);
+
   useEffect(() => {
     return room.onAppMessage((msg) => {
       // Play / pause / seek / load are bidirectional — either partner's action
@@ -613,7 +624,7 @@ export function RoomShell({ code }: { code: string }) {
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="relative w-full max-w-sm rounded-2xl border border-white/12 bg-[#12141D] p-5 shadow-2xl"
+            className="relative w-full max-w-sm max-h-[85dvh] flex flex-col rounded-2xl border border-white/12 bg-[#12141D] p-5 shadow-2xl"
           >
             <button
               type="button"
@@ -622,22 +633,23 @@ export function RoomShell({ code }: { code: string }) {
             >
               <X size={18} />
             </button>
-            <h3 className="text-sm font-semibold mb-3">Connection info</h3>
-            <div className="space-y-1 font-mono text-[11px]">
+            <h3 className="text-sm font-semibold mb-1">Connection info</h3>
+            <p className="text-[10px] text-emerald-400/80 mb-3">
+              Live · auto-refreshing
+            </p>
+            <div className="space-y-1 font-mono text-[11px] overflow-y-auto no-scrollbar">
               {Object.entries(diag).map(([k, v]) => {
                 const bad =
                   (k === "videoFlowing" && v === false) ||
                   (k === "audioFlowing" && v === false) ||
+                  (k === "sendingVideo" && v === false) ||
+                  (k === "sendingAudio" && v === false) ||
                   (k === "connection" && v !== "connected") ||
                   (k === "candidatePair" && v !== "succeeded");
                 return (
                   <div key={k} className="flex justify-between gap-3">
                     <span className="text-[#9CA3AF]">{k}</span>
-                    <span
-                      className={
-                        bad ? "text-rose-400" : "text-emerald-300/90"
-                      }
-                    >
+                    <span className={bad ? "text-rose-400" : "text-emerald-300/90"}>
                       {String(v)}
                     </span>
                   </div>
@@ -646,10 +658,18 @@ export function RoomShell({ code }: { code: string }) {
             </div>
             <button
               type="button"
-              onClick={async () => setDiag(await room.getDiagnostics())}
-              className="mt-4 w-full py-2 rounded-full bg-white/[0.06] border border-white/12 text-xs font-medium"
+              onClick={() => {
+                const text = Object.entries(diag)
+                  .map(([k, v]) => `${k}: ${v}`)
+                  .join("\n");
+                if (navigator.clipboard?.writeText) {
+                  void navigator.clipboard.writeText(text);
+                  toast("Diagnostics copied — paste to share");
+                }
+              }}
+              className="mt-4 w-full py-2 rounded-full bg-white/[0.06] border border-white/12 text-xs font-medium shrink-0"
             >
-              Refresh
+              Copy diagnostics
             </button>
           </div>
         </div>

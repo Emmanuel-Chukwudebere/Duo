@@ -1441,16 +1441,63 @@ export function useDuoRoom(roomCode: string) {
     } catch {
       /* getStats unsupported */
     }
+    // Per-transceiver directions + inbound bytes by kind (diagnoses the
+    // "connected but wrong m-line / screen-not-flowing" class of bugs).
+    let outboundVideo = 0;
+    let outboundAudio = 0;
+    let inboundVideoStreams = 0;
+    try {
+      const stats = await pc.getStats();
+      stats.forEach((r) => {
+        if (r.type === "outbound-rtp" && r.kind === "video")
+          outboundVideo += r.bytesSent || 0;
+        if (r.type === "outbound-rtp" && r.kind === "audio")
+          outboundAudio += r.bytesSent || 0;
+        if (r.type === "inbound-rtp" && r.kind === "video") inboundVideoStreams++;
+      });
+    } catch {
+      /* ignore */
+    }
+    const tx = pc
+      .getTransceivers()
+      .map(
+        (t) =>
+          `${t.receiver.track?.kind ?? "?"}:${t.currentDirection ?? t.direction}`,
+      )
+      .join(" ");
+
     return {
       ...base,
       inboundVideoBytes: inboundVideo,
       inboundAudioBytes: inboundAudio,
+      outboundVideoBytes: outboundVideo,
+      outboundAudioBytes: outboundAudio,
       videoFlowing: inboundVideo > 0,
       audioFlowing: inboundAudio > 0,
+      sendingVideo: outboundVideo > 0,
+      sendingAudio: outboundAudio > 0,
+      inboundVideoStreams,
+      transceivers: tx || "none",
       candidatePair: candidatePair || "none-succeeded",
       pathUsingRelay: localType === "relay" || remoteType === "relay",
-      localCandidateType: localType || "?",
-      remoteCandidateType: remoteType || "?",
+      // Screen/video share state
+      sharing: stateRef.current.sharing,
+      remoteSharing: stateRef.current.remoteSharing,
+      screenSenderVideo: screenSendersRef.current.video?.track?.readyState ?? "none",
+      remoteScreenTracks: remoteScreenStreamRef.current?.getTracks().length ?? 0,
+      remoteScreenId: remoteScreenStreamIdRef.current ?? "none",
+      // Audio playback
+      remoteAudioTracks: remoteAudioStreamRef.current?.getAudioTracks().length ?? 0,
+      remoteAudioMuted: remoteAudioRef.current?.muted ?? null,
+      audioBlocked: stateRef.current.audioBlocked,
+      // Ducking / VAD
+      duckingMode: stateRef.current.duckingMode,
+      duckLevel: Math.round(stateRef.current.duckLevel * 100) / 100,
+      localSpeaking: stateRef.current.localSpeaking,
+      vadActive: vadRef.current != null,
+      // YouTube sync
+      ytController: stateRef.current.ytControllerId === stateRef.current.peerId ? "me" : "partner",
+      ytVideoId: stateRef.current.ytVideoId ?? "none",
     };
   }, []);
 
