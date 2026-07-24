@@ -81,6 +81,9 @@ export interface DuoRoomState {
   partnerCamOn: boolean;
   lastReaction: { emoji: string; id: number } | null;
   status: string;
+  /** True when the browser blocked audible playback of the partner's stream
+   * (mobile autoplay policy) — UI shows a "Tap to hear/see partner" prompt. */
+  audioBlocked: boolean;
 }
 
 export function useDuoRoom(roomCode: string) {
@@ -113,6 +116,7 @@ export function useDuoRoom(roomCode: string) {
       partnerCamOn: true,
       lastReaction: null,
       status: "Connecting…",
+      audioBlocked: false,
     };
   });
 
@@ -201,8 +205,29 @@ export function useDuoRoom(roomCode: string) {
       if (el.srcObject !== cam) {
         el.srcObject = cam;
       }
-      el.muted = false;
-      void el.play().catch(() => undefined);
+      // Mobile autoplay policy: an UNMUTED play() without a prior user gesture
+      // rejects with NotAllowedError and renders NOTHING (no video either). So
+      // always start muted+inline so the picture shows, then TRY to unmute. If
+      // that fails, flag audioBlocked so the UI can offer a tap-to-unmute.
+      el.playsInline = true;
+      el.muted = true;
+      void el
+        .play()
+        .then(() => {
+          const p = el.play();
+          el.muted = false;
+          return p;
+        })
+        .then(() => {
+          // Unmuted playback succeeded (desktop or already-interacted mobile).
+          if (stateRef.current.audioBlocked) update({ audioBlocked: false });
+        })
+        .catch(() => {
+          // Unmuted blocked — keep muted so video still shows, prompt for a tap.
+          el.muted = true;
+          void el.play().catch(() => undefined);
+          if (!stateRef.current.audioBlocked) update({ audioBlocked: true });
+        });
     }
     track.onunmute = () => {
       if (remoteVideoRef.current) {
@@ -210,7 +235,7 @@ export function useDuoRoom(roomCode: string) {
         void remoteVideoRef.current.play().catch(() => undefined);
       }
     };
-  }, []);
+  }, [update]);
 
   const flushIce = useCallback(async (pc: RTCPeerConnection) => {
     if (!remoteDescSetRef.current) return;
@@ -386,7 +411,14 @@ export function useDuoRoom(roomCode: string) {
         },
       ],
     });
-    const screenVideo = pc.addTransceiver("video", { direction: "sendrecv" });
+    const screenVideo = pc.addTransceiver("video", {
+      direction: "sendrecv",
+      // Cap screen share so it stays in "Google Meet" territory (adaptive,
+      // compressed, ~data-light) rather than "Netflix/YouTube" high-bitrate
+      // streaming. ~2.5 Mbps ceiling keeps text crisp but never balloons; WebRTC
+      // still adapts DOWN automatically on weak/metered links.
+      sendEncodings: [{ maxBitrate: 2_500_000, maxFramerate: 30 }],
+    });
     const screenAudio = pc.addTransceiver("audio", { direction: "sendrecv" });
     transceiversRef.current = { camAudio, camVideo, screenVideo, screenAudio };
 
@@ -951,6 +983,35 @@ export function useDuoRoom(roomCode: string) {
     }
   });
 
+  // The FIRST user interaction anywhere in the room is a valid gesture to unmute
+  // the partner's audio (mobile autoplay policy). This makes audio "just work"
+  // after the user's first tap without them having to find a special button.
+  useEffect(() => {
+    const onFirstGesture = () => {
+      const el = remoteVideoRef.current;
+      if (el && el.srcObject) {
+        el.muted = false;
+        void el
+          .play()
+          .then(() => {
+            if (stateRef.current.audioBlocked) update({ audioBlocked: false });
+          })
+          .catch(() => {
+            el.muted = true;
+            void el.play().catch(() => undefined);
+          });
+      }
+    };
+    window.addEventListener("pointerdown", onFirstGesture);
+    window.addEventListener("touchstart", onFirstGesture);
+    window.addEventListener("keydown", onFirstGesture);
+    return () => {
+      window.removeEventListener("pointerdown", onFirstGesture);
+      window.removeEventListener("touchstart", onFirstGesture);
+      window.removeEventListener("keydown", onFirstGesture);
+    };
+  }, [update]);
+
   const setMode = useCallback(
     (mode: StageMode) => {
       update({ mode });
@@ -1166,6 +1227,21 @@ export function useDuoRoom(roomCode: string) {
     [sendApp, update],
   );
 
+  // Called from a user gesture (tap) to satisfy the mobile autoplay policy and
+  // turn the partner's audio on. Clears the audioBlocked prompt on success.
+  const unmuteRemote = useCallback(() => {
+    const el = remoteVideoRef.current;
+    if (!el) return;
+    el.muted = false;
+    void el
+      .play()
+      .then(() => update({ audioBlocked: false }))
+      .catch(() => {
+        el.muted = true;
+        void el.play().catch(() => undefined);
+      });
+  }, [update]);
+
   const resync = useCallback(() => {
     if (partnerIdRef.current) {
       update({ status: "Re-syncing with partner…" });
@@ -1217,6 +1293,7 @@ export function useDuoRoom(roomCode: string) {
     setDuckingMode,
     triggerTalk,
     sendReaction,
+    unmuteRemote,
     resync,
     isYtController,
     duckLevel: state.duckLevel,

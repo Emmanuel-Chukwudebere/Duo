@@ -493,6 +493,21 @@ export function RoomShell({ code }: { code: string }) {
                   ) : null}
                 </div>
               ) : null}
+              {/* Mobile autoplay muted the partner — one tap on the bubble
+                  restores their audio (distinct from the media-ducking "Talk"). */}
+              {connected && state.audioBlocked ? (
+                <button
+                  type="button"
+                  onClick={room.unmuteRemote}
+                  className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-0.5 bg-[#0A0B10]/70 backdrop-blur-sm"
+                  aria-label="Tap to hear partner"
+                >
+                  <VolumeX className="h-5 w-5 text-white" />
+                  <span className="text-[7px] font-semibold uppercase tracking-wide text-white/90">
+                    Tap for sound
+                  </span>
+                </button>
+              ) : null}
               <div className="absolute bottom-0.5 inset-x-0 text-center text-[7px] sm:text-[9px] tracking-widest text-white/70 pointer-events-none">
                 {connected ? "PARTNER" : "…"}
               </div>
