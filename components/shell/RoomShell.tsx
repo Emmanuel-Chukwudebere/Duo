@@ -195,6 +195,9 @@ export function RoomShell({ code }: { code: string }) {
   return (
     <div className="h-dvh max-h-dvh flex flex-col overflow-hidden bg-[#0A0B10]">
       <ToastHost />
+      {/* Partner's voice plays through a dedicated always-unmuted audio element
+          (a muted <video> won't reliably output its MediaStream audio). */}
+      <audio ref={room.remoteAudioRef} autoPlay playsInline className="hidden" />
 
       {/* Fixed-height chrome — never pushed by stage growth */}
       <header className="shrink-0 z-50 border-b border-white/[0.06] bg-[#0A0B10] pt-[env(safe-area-inset-top)]">

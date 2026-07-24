@@ -189,6 +189,14 @@ export function useDuoRoom(roomCode: string) {
 
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
+  // Dedicated <audio> for the partner's voice. A <video> that was ever muted
+  // won't reliably output its MediaStream audio (why desktop saw audio bytes but
+  // heard nothing), so the video element stays muted and sound plays here.
+  const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
+  const remoteAudioStreamRef = useRef<MediaStream>(null as unknown as MediaStream);
+  if (typeof window !== "undefined" && !remoteAudioStreamRef.current) {
+    remoteAudioStreamRef.current = new MediaStream();
+  }
   const screenVideoRef = useRef<HTMLVideoElement | null>(null);
 
   const update = useCallback((patch: Partial<DuoRoomState>) => {
@@ -219,41 +227,43 @@ export function useDuoRoom(roomCode: string) {
   }, []);
 
   const attachRemoteCam = useCallback((track: MediaStreamTrack) => {
+    // AUDIO → dedicated <audio> element (always unmuted). VIDEO → <video> (kept
+    // muted so autoplay always shows the picture; its audio would be unreliable).
+    if (track.kind === "audio") {
+      const astream = remoteAudioStreamRef.current;
+      if (!astream.getTracks().some((t) => t.id === track.id)) {
+        astream.getAudioTracks().forEach((t) => astream.removeTrack(t));
+        astream.addTrack(track);
+      }
+      const ael = remoteAudioRef.current;
+      if (ael) {
+        if (ael.srcObject !== astream) ael.srcObject = astream;
+        ael.muted = false;
+        ael.volume = 1;
+        void ael
+          .play()
+          .then(() => {
+            if (stateRef.current.audioBlocked) update({ audioBlocked: false });
+          })
+          .catch(() => {
+            // Autoplay-with-audio blocked (mobile) — prompt for a tap.
+            if (!stateRef.current.audioBlocked) update({ audioBlocked: true });
+          });
+      }
+      return;
+    }
+
     const cam = remoteCamStreamRef.current;
-    if (!cam.getTracks().some((t) => t.id === track.id)) {
-      cam.getTracks()
-        .filter((t) => t.kind === track.kind)
-        .forEach((t) => cam.removeTrack(t));
+    if (!cam.getVideoTracks().some((t) => t.id === track.id)) {
+      cam.getVideoTracks().forEach((t) => cam.removeTrack(t));
       cam.addTrack(track);
     }
     const el = remoteVideoRef.current;
     if (el) {
-      if (el.srcObject !== cam) {
-        el.srcObject = cam;
-      }
-      // Mobile autoplay policy: an UNMUTED play() without a prior user gesture
-      // rejects with NotAllowedError and renders NOTHING (no video either). So
-      // always start muted+inline so the picture shows, then TRY to unmute. If
-      // that fails, flag audioBlocked so the UI can offer a tap-to-unmute.
+      if (el.srcObject !== cam) el.srcObject = cam;
       el.playsInline = true;
-      el.muted = true;
-      void el
-        .play()
-        .then(() => {
-          const p = el.play();
-          el.muted = false;
-          return p;
-        })
-        .then(() => {
-          // Unmuted playback succeeded (desktop or already-interacted mobile).
-          if (stateRef.current.audioBlocked) update({ audioBlocked: false });
-        })
-        .catch(() => {
-          // Unmuted blocked — keep muted so video still shows, prompt for a tap.
-          el.muted = true;
-          void el.play().catch(() => undefined);
-          if (!stateRef.current.audioBlocked) update({ audioBlocked: true });
-        });
+      el.muted = true; // audio comes from the <audio> element instead
+      void el.play().catch(() => undefined);
     }
     track.onunmute = () => {
       if (remoteVideoRef.current) {
@@ -976,18 +986,16 @@ export function useDuoRoom(roomCode: string) {
   // after the user's first tap without them having to find a special button.
   useEffect(() => {
     const onFirstGesture = () => {
-      const el = remoteVideoRef.current;
-      if (el && el.srcObject) {
-        el.muted = false;
-        void el
+      const ael = remoteAudioRef.current;
+      if (ael && ael.srcObject) {
+        ael.muted = false;
+        ael.volume = 1;
+        void ael
           .play()
           .then(() => {
             if (stateRef.current.audioBlocked) update({ audioBlocked: false });
           })
-          .catch(() => {
-            el.muted = true;
-            void el.play().catch(() => undefined);
-          });
+          .catch(() => undefined);
       }
     };
     window.addEventListener("pointerdown", onFirstGesture);
@@ -1489,16 +1497,14 @@ export function useDuoRoom(roomCode: string) {
   // Called from a user gesture (tap) to satisfy the mobile autoplay policy and
   // turn the partner's audio on. Clears the audioBlocked prompt on success.
   const unmuteRemote = useCallback(() => {
-    const el = remoteVideoRef.current;
-    if (!el) return;
-    el.muted = false;
-    void el
+    const ael = remoteAudioRef.current;
+    if (!ael) return;
+    ael.muted = false;
+    ael.volume = 1;
+    void ael
       .play()
       .then(() => update({ audioBlocked: false }))
-      .catch(() => {
-        el.muted = true;
-        void el.play().catch(() => undefined);
-      });
+      .catch(() => undefined);
   }, [update]);
 
   const resync = useCallback(() => {
@@ -1537,6 +1543,7 @@ export function useDuoRoom(roomCode: string) {
     state,
     localVideoRef,
     remoteVideoRef,
+    remoteAudioRef,
     screenVideoRef,
     setMode,
     setCinemaSource,
