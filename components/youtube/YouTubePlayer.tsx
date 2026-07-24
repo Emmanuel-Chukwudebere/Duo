@@ -136,6 +136,10 @@ export function YouTubePlayer({
   const onPauseRef = useRef(onPause);
   const lastRemoteId = useRef<number | null>(null);
   const pendingRemote = useRef<YouTubePlayerProps["remoteCommand"] | null>(null);
+  // When we apply a play/pause that CAME FROM the partner, the resulting local
+  // onStateChange must NOT re-broadcast it — otherwise the two clients ping-pong
+  // play/pause forever. This flag suppresses the echo for a brief window.
+  const suppressEmitUntil = useRef(0);
   const reactId = useId().replace(/:/g, "");
   const [playing, setPlaying] = useState(false);
   const [playerReady, setPlayerReady] = useState(false);
@@ -207,8 +211,12 @@ export function YouTubePlayer({
             setPlayerReady(true);
             applyDuck(e.target, duckRef.current);
             // Apply any remote command that arrived before the player was ready
-            // (e.g. the follower loaded the page mid-playback).
-            if (!isControllerRef.current && pendingRemote.current) {
+            // (e.g. loaded the page mid-playback). Skip a stale one-way sync if
+            // we're the controller; play/pause/load still apply either way.
+            if (
+              pendingRemote.current &&
+              !(pendingRemote.current.kind === "sync" && isControllerRef.current)
+            ) {
               const cmd = pendingRemote.current;
               pendingRemote.current = null;
               window.setTimeout(() => applyRemote(cmd), 300);
@@ -229,16 +237,19 @@ export function YouTubePlayer({
           },
           onStateChange: (e: { data: number }) => {
             if (!window.YT || destroyed) return;
+            // Either partner can drive play/pause (shared control). Suppress the
+            // echo when the change was caused by an incoming remote command.
+            const echoSuppressed = Date.now() < suppressEmitUntil.current;
             if (e.data === window.YT.PlayerState.PLAYING) {
               setPlaying(true);
-              if (isControllerRef.current) onPlayRef.current?.();
+              if (!echoSuppressed) onPlayRef.current?.();
             }
             if (
               e.data === window.YT.PlayerState.PAUSED ||
               e.data === window.YT.PlayerState.ENDED
             ) {
               setPlaying(false);
-              if (e.data === window.YT.PlayerState.PAUSED && isControllerRef.current) {
+              if (e.data === window.YT.PlayerState.PAUSED && !echoSuppressed) {
                 onPauseRef.current?.();
               }
             }
@@ -277,6 +288,8 @@ export function YouTubePlayer({
     (cmd: NonNullable<YouTubePlayerProps["remoteCommand"]>) => {
       const p = playerRef.current;
       if (!p || !readyRef.current) return;
+      // This change originates from the partner — don't echo it back out.
+      suppressEmitUntil.current = Date.now() + 1200;
       try {
         if (cmd.kind === "play") forcePlay(p);
         if (cmd.kind === "pause") p.pauseVideo();
@@ -305,11 +318,13 @@ export function YouTubePlayer({
     [],
   );
 
-  // Remote commands (follower). If the player isn't ready yet, stash the command
-  // and apply it on onReady — otherwise the first play/load is dropped forever and
-  // the follower stays paused until they click play manually.
+  // Apply commands from the partner. Play/pause/seek/load are bidirectional
+  // (either person can drive them, with echo suppression). Only the periodic
+  // "sync" heartbeat is one-way — the follower reconciles to the controller's
+  // clock, so a non-controller ignores sync to avoid a tug-of-war.
   useEffect(() => {
-    if (!remoteCommand || isController) return;
+    if (!remoteCommand) return;
+    if (remoteCommand.kind === "sync" && isController) return;
     if (lastRemoteId.current === remoteCommand.id) return;
     lastRemoteId.current = remoteCommand.id;
     if (!playerRef.current || !readyRef.current) {

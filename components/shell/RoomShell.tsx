@@ -70,6 +70,7 @@ export function RoomShell({ code }: { code: string }) {
   } | null>(null);
   const [bubblesCollapsed, setBubblesCollapsed] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
+  const [inviteDismissed, setInviteDismissed] = useState(false);
   const stageConstraintsRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -105,29 +106,32 @@ export function RoomShell({ code }: { code: string }) {
 
   useEffect(() => {
     return room.onAppMessage((msg) => {
+      // Play / pause / seek / load are bidirectional — either partner's action
+      // mirrors to the other (the player suppresses echo). Only the periodic
+      // "yt.time" heartbeat is one-way (controller → follower reconcile).
+      if (msg.type === "yt.play")
+        setRemoteYtCommand({ id: Date.now(), kind: "play" });
+      if (msg.type === "yt.pause")
+        setRemoteYtCommand({ id: Date.now(), kind: "pause" });
+      if (msg.type === "yt.seek")
+        setRemoteYtCommand({
+          id: Date.now(),
+          kind: "seek",
+          seconds: msg.seconds,
+        });
+      if (msg.type === "yt.load")
+        setRemoteYtCommand({
+          id: Date.now(),
+          kind: "load",
+          videoId: msg.videoId,
+        });
       if (!room.isYtController) {
-        if (msg.type === "yt.play")
-          setRemoteYtCommand({ id: Date.now(), kind: "play" });
-        if (msg.type === "yt.pause")
-          setRemoteYtCommand({ id: Date.now(), kind: "pause" });
-        if (msg.type === "yt.seek")
-          setRemoteYtCommand({
-            id: Date.now(),
-            kind: "seek",
-            seconds: msg.seconds,
-          });
         if (msg.type === "yt.time")
           setRemoteYtCommand({
             id: Date.now(),
             kind: "sync",
             seconds: msg.seconds,
             playing: msg.playing,
-          });
-        if (msg.type === "yt.load")
-          setRemoteYtCommand({
-            id: Date.now(),
-            kind: "load",
-            videoId: msg.videoId,
           });
       }
     });
@@ -153,7 +157,9 @@ export function RoomShell({ code }: { code: string }) {
   }
 
   function onYtEvent(msg: DuoAppMessage) {
-    if (!room.isYtController) return;
+    // The periodic heartbeat is the controller's job only (avoids two clocks
+    // fighting). Play/pause/seek/load can be driven by EITHER partner.
+    if (msg.type === "yt.time" && !room.isYtController) return;
     room.sendYt(msg);
   }
 
@@ -385,47 +391,52 @@ export function RoomShell({ code }: { code: string }) {
             </AnimatePresence>
           </div>
 
-          {/* Invite affordance — prominent while you're alone, so it's obvious
-              how to bring your partner in (was buried in tiny header chips). */}
+          {/* Invite affordance — a compact, dismissible pill pinned to the TOP of
+              the stage so it never covers the active card/content. Reopen anytime
+              via the header QR/Copy chips. */}
           <AnimatePresence>
-            {!state.partnerPresent ? (
+            {!state.partnerPresent && !inviteDismissed ? (
               <motion.div
-                initial={{ opacity: 0, y: 10 }}
+                initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 10 }}
-                className="absolute left-1/2 -translate-x-1/2 z-20 w-[min(100%-1.5rem,26rem)] bottom-[7rem] sm:bottom-[8.5rem]"
+                exit={{ opacity: 0, y: -10 }}
+                className="absolute left-1/2 -translate-x-1/2 z-20 w-[min(100%-1.5rem,30rem)] top-3"
               >
-                <div className="rounded-2xl border border-white/12 bg-[#181B26] px-4 py-3 shadow-2xl ring-1 ring-black/40">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="relative flex h-2 w-2">
-                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400/70" />
-                      <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-400" />
-                    </span>
-                    <p className="text-sm font-semibold">Invite your partner</p>
-                  </div>
-                  <p className="text-xs text-[#9CA3AF] mb-2.5">
-                    Share this link or code — the date starts when they join.
+                <div className="flex items-center gap-2 rounded-full border border-white/12 bg-[#181B26] pl-3 pr-1.5 py-1.5 shadow-2xl ring-1 ring-black/40">
+                  <span className="relative flex h-2 w-2 shrink-0">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400/70" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-400" />
+                  </span>
+                  <p className="text-xs font-medium truncate">
+                    Invite your partner
+                    <span className="hidden xs:inline text-[#9CA3AF]"> · code </span>
+                    <span className="hidden xs:inline font-mono text-white/90">{code}</span>
                   </p>
-                  <div className="flex items-center gap-2">
+                  <div className="ml-auto flex items-center gap-1 shrink-0">
                     <button
                       type="button"
                       onClick={copyLink}
-                      className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-full bg-[#FF5A79] text-white text-xs font-semibold py-2.5 min-h-[40px] hover:bg-[#FF5A79]/90 transition-colors"
+                      className="inline-flex items-center gap-1 rounded-full bg-[#FF5A79] text-white text-xs font-semibold px-3 py-1.5 hover:bg-[#FF5A79]/90 transition-colors"
                     >
-                      <Copy size={14} /> Copy invite link
+                      <Copy size={13} /> Copy
                     </button>
                     <button
                       type="button"
                       onClick={() => setShowQrModal(true)}
-                      className="inline-flex items-center justify-center gap-1.5 rounded-full border border-white/12 bg-white/[0.04] text-[#8A5CF5] text-xs font-semibold px-3 py-2.5 min-h-[40px] hover:bg-white/[0.08] transition-colors"
+                      className="inline-flex items-center justify-center rounded-full border border-white/12 bg-white/[0.04] text-[#8A5CF5] px-2.5 py-1.5 hover:bg-white/[0.08] transition-colors"
                       aria-label="Show QR code"
                     >
-                      <QrCode size={14} /> QR
+                      <QrCode size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setInviteDismissed(true)}
+                      className="inline-flex items-center justify-center rounded-full text-white/50 hover:text-white p-1.5 transition-colors"
+                      aria-label="Dismiss invite"
+                    >
+                      <X size={14} />
                     </button>
                   </div>
-                  <p className="mt-2 text-center text-[11px] text-[#9CA3AF]/70">
-                    Room code <span className="font-mono text-white/90">{code}</span>
-                  </p>
                 </div>
               </motion.div>
             ) : null}
@@ -518,11 +529,15 @@ export function RoomShell({ code }: { code: string }) {
 
           <AnimatePresence>
             {showQrModal ? (
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md">
+              <div
+                className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md"
+                onClick={() => setShowQrModal(false)}
+              >
                 <motion.div
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.95 }}
+                  onClick={(e) => e.stopPropagation()}
                   className="relative w-full max-w-sm rounded-3xl border border-white/10 bg-[#12141D] p-6 text-center shadow-2xl space-y-4"
                 >
                   <button
