@@ -17,12 +17,11 @@ export interface StackItem {
  */
 export function CardStack({
   items,
-  onSwipeTop,
-  disabled,
   className = "",
 }: {
   items: StackItem[];
-  onSwipeTop: (dir: SwipeDir, item: StackItem) => void;
+  /** @deprecated cards are button-driven now; kept optional for callers */
+  onSwipeTop?: (dir: SwipeDir, item: StackItem) => void;
   disabled?: boolean;
   className?: string;
 }) {
@@ -33,7 +32,7 @@ export function CardStack({
   return (
     <div
       className={`relative w-full max-w-[380px] mx-auto sm:max-w-[400px] ${className}`}
-      style={{ minHeight: 420, aspectRatio: "3 / 4" }}
+      style={{ minHeight: 320, aspectRatio: "3 / 4" }}
     >
       <AnimatePresence initial={false}>
         {ordered.map((item) => {
@@ -55,11 +54,9 @@ export function CardStack({
             >
               {isTop ? (
                 <SwipeCard
-                  disabled={disabled}
                   leftHint={item.leftHint}
                   rightHint={item.rightHint}
                   showHints={item.showHints !== false}
-                  onSwipe={(dir) => onSwipeTop(dir, item)}
                 >
                   {item.node}
                 </SwipeCard>

@@ -377,6 +377,8 @@ export function RoomShell({ code }: { code: string }) {
                     bindLocalScreenPreview={room.bindLocalScreenPreview}
                     getLocalScreenStream={room.getLocalScreenStream}
                     getRemoteScreenStream={room.getRemoteScreenStream}
+                    screenQuality={state.screenQuality}
+                    setScreenQuality={room.setScreenQuality}
                   />
                 ) : null}
               </motion.div>

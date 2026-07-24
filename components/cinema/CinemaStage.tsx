@@ -28,6 +28,8 @@ export function CinemaStage({
   bindLocalScreenPreview,
   getLocalScreenStream,
   getRemoteScreenStream,
+  screenQuality,
+  setScreenQuality,
 }: {
   cinemaSource: CinemaSource;
   setCinemaSource: (s: CinemaSource) => void;
@@ -54,6 +56,8 @@ export function CinemaStage({
   bindLocalScreenPreview: () => boolean;
   getLocalScreenStream: () => MediaStream | null;
   getRemoteScreenStream: () => MediaStream;
+  screenQuality: "saver" | "hd";
+  setScreenQuality: (q: "saver" | "hd") => void;
 }) {
   const screenActive = sharing || remoteSharing;
   const localVideoEl = useRef<HTMLVideoElement | null>(null);
@@ -285,15 +289,34 @@ export function CinemaStage({
               </div>
               <div className="absolute top-3 right-3 z-10 flex gap-2">
                 {sharing ? (
-                  <motion.button
-                    type="button"
-                    whileTap={{ scale: 0.97 }}
-                    onClick={stopScreenShare}
-                    className="px-3 py-2 rounded-full bg-red-500/15 border border-red-400/40 text-red-300 text-xs font-semibold min-h-[36px] inline-flex items-center gap-1.5"
-                  >
-                    <TwoToneIcon icon={Square} tone="rose" size={12} />
-                    Stop share
-                  </motion.button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setScreenQuality(screenQuality === "hd" ? "saver" : "hd")
+                      }
+                      className="px-3 py-2 rounded-full bg-black/70 border border-white/15 text-white text-xs font-semibold min-h-[36px] inline-flex items-center gap-1.5 hover:bg-black/85"
+                      title={
+                        screenQuality === "hd"
+                          ? "HD — sharper, ~450MB/hr. Tap for data saver."
+                          : "Data saver — ~90MB/hr. Tap for HD."
+                      }
+                    >
+                      {screenQuality === "hd" ? "HD" : "Saver"}
+                      <span className="text-white/50 font-normal">
+                        {screenQuality === "hd" ? "~450MB/hr" : "~90MB/hr"}
+                      </span>
+                    </button>
+                    <motion.button
+                      type="button"
+                      whileTap={{ scale: 0.97 }}
+                      onClick={stopScreenShare}
+                      className="px-3 py-2 rounded-full bg-red-500/15 border border-red-400/40 text-red-300 text-xs font-semibold min-h-[36px] inline-flex items-center gap-1.5"
+                    >
+                      <TwoToneIcon icon={Square} tone="rose" size={12} />
+                      Stop share
+                    </motion.button>
+                  </>
                 ) : (
                   <>
                     <motion.button

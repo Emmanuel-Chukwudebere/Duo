@@ -27,6 +27,9 @@ const DEFAULT_ICE: RTCConfiguration = {
   iceCandidatePoolSize: 4,
 };
 
+// Screen-share bitrate ceilings. saver ≈ ~90MB/hr on the receiver; hd ≈ ~450MB/hr.
+const SCREEN_BITRATE = { saver: 200_000, hd: 1_000_000 } as const;
+
 /** Fetch ICE servers (incl. TURN relay) from the server. Falls back to STUN-only. */
 async function fetchIceConfig(): Promise<RTCConfiguration> {
   try {
@@ -84,6 +87,8 @@ export interface DuoRoomState {
   /** True when the browser blocked audible playback of the partner's stream
    * (mobile autoplay policy) — UI shows a "Tap to hear/see partner" prompt. */
   audioBlocked: boolean;
+  /** Screen-share quality. "saver" ≈200kbps (~90MB/hr), "hd" ≈1Mbps (~450MB/hr). */
+  screenQuality: "saver" | "hd";
 }
 
 export function useDuoRoom(roomCode: string) {
@@ -117,6 +122,7 @@ export function useDuoRoom(roomCode: string) {
       lastReaction: null,
       status: "Connecting…",
       audioBlocked: false,
+      screenQuality: "saver",
     };
   });
 
@@ -413,11 +419,18 @@ export function useDuoRoom(roomCode: string) {
     });
     const screenVideo = pc.addTransceiver("video", {
       direction: "sendrecv",
-      // Cap screen share so it stays in "Google Meet" territory (adaptive,
-      // compressed, ~data-light) rather than "Netflix/YouTube" high-bitrate
-      // streaming. ~2.5 Mbps ceiling keeps text crisp but never balloons; WebRTC
-      // still adapts DOWN automatically on weak/metered links.
-      sendEncodings: [{ maxBitrate: 2_500_000, maxFramerate: 30 }],
+      // Default to Data-saver (~200kbps ≈ ~90MB/hr on the receiver) so mobile
+      // partners don't burn data; user can switch to HD via setScreenQuality.
+      // WebRTC still adapts DOWN further on weak links.
+      sendEncodings: [
+        {
+          maxBitrate:
+            stateRef.current.screenQuality === "hd"
+              ? SCREEN_BITRATE.hd
+              : SCREEN_BITRATE.saver,
+          maxFramerate: 30,
+        },
+      ],
     });
     const screenAudio = pc.addTransceiver("audio", { direction: "sendrecv" });
     transceiversRef.current = { camAudio, camVideo, screenVideo, screenAudio };
@@ -1166,6 +1179,27 @@ export function useDuoRoom(roomCode: string) {
     update,
   ]);
 
+  // Live-adjust the screen-share sender bitrate without renegotiation.
+  const setScreenQuality = useCallback(
+    (quality: "saver" | "hd") => {
+      update({ screenQuality: quality });
+      const sender = transceiversRef.current?.screenVideo.sender;
+      if (!sender) return;
+      try {
+        const params = sender.getParameters();
+        if (!params.encodings || params.encodings.length === 0) {
+          params.encodings = [{}];
+        }
+        params.encodings[0]!.maxBitrate = SCREEN_BITRATE[quality];
+        params.encodings[0]!.maxFramerate = 30;
+        void sender.setParameters(params).catch(() => undefined);
+      } catch {
+        /* setParameters unsupported — ignore */
+      }
+    },
+    [update],
+  );
+
   const loadYoutube = useCallback(
     (videoId: string, title?: string) => {
       update({ ytVideoId: videoId, ytTitle: title || "" });
@@ -1285,6 +1319,7 @@ export function useDuoRoom(roomCode: string) {
     toggleCam,
     startScreenShare,
     stopScreenShare,
+    setScreenQuality,
     loadYoutube,
     takeYtControl,
     sendYt,

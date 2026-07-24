@@ -410,7 +410,7 @@ export function GamesStage({
   const meta = GAME_META[active];
 
   return (
-    <div className="absolute inset-0 flex flex-col p-3 sm:p-6 md:p-8 pb-24 sm:pb-8 overflow-hidden">
+    <div className="absolute inset-0 flex flex-col p-3 sm:p-6 md:p-8 pb-24 sm:pb-8 overflow-y-auto no-scrollbar">
       <div className="flex items-start justify-between gap-3 flex-wrap shrink-0 mb-3">
         <div>
           <div className="text-xs tracking-wider font-medium uppercase text-[#8A5CF5]">
@@ -447,7 +447,7 @@ export function GamesStage({
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col items-center justify-center min-h-0">
+      <div className="flex-1 flex flex-col items-center justify-center min-h-0 py-2">
         <AnimatePresence mode="wait">
           {active === "wyr" ? (
             <motion.div
