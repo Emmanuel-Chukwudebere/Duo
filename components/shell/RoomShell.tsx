@@ -383,6 +383,7 @@ export function RoomShell({ code }: { code: string }) {
                     screenPreviewKey={state.screenPreviewKey}
                     startScreenShare={room.startScreenShare}
                     stopScreenShare={room.stopScreenShare}
+                    shareVideoFile={room.shareVideoFile}
                     bindLocalScreenPreview={room.bindLocalScreenPreview}
                     getLocalScreenStream={room.getLocalScreenStream}
                     getRemoteScreenStream={room.getRemoteScreenStream}
@@ -756,10 +757,21 @@ export function RoomShell({ code }: { code: string }) {
                 <PopoverItem
                   icon={<TwoToneIcon icon={MonitorUp} tone="amber" size={16} />}
                   label="Share quality"
-                  hint={state.screenQuality === "hd" ? "HD" : "Saver"}
+                  hint={
+                    state.screenQuality === "hd"
+                      ? "HD"
+                      : state.screenQuality === "ultra"
+                        ? "Ultra"
+                        : "Saver"
+                  }
                   onClick={() =>
+                    // Cycle: ultra → saver → hd → ultra
                     room.setScreenQuality(
-                      state.screenQuality === "hd" ? "saver" : "hd",
+                      state.screenQuality === "ultra"
+                        ? "saver"
+                        : state.screenQuality === "saver"
+                          ? "hd"
+                          : "ultra",
                     )
                   }
                 />

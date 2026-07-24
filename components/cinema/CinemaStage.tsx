@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { Maximize2, MonitorUp, Play, Square } from "lucide-react";
+import { Film, Maximize2, MonitorUp, Play, Square } from "lucide-react";
 import type { CinemaSource, DuoAppMessage } from "@/lib/types";
 import { YouTubePlayer } from "@/components/youtube/YouTubePlayer";
 import { YouTubeSearch } from "@/components/youtube/YouTubeSearch";
@@ -28,6 +28,7 @@ export function CinemaStage({
   bindLocalScreenPreview,
   getLocalScreenStream,
   getRemoteScreenStream,
+  shareVideoFile,
   screenQuality,
   setScreenQuality,
 }: {
@@ -56,11 +57,13 @@ export function CinemaStage({
   bindLocalScreenPreview: () => boolean;
   getLocalScreenStream: () => MediaStream | null;
   getRemoteScreenStream: () => MediaStream;
-  screenQuality: "saver" | "hd";
-  setScreenQuality: (q: "saver" | "hd") => void;
+  shareVideoFile: (file: File) => void;
+  screenQuality: "ultra" | "saver" | "hd";
+  setScreenQuality: (q: "ultra" | "saver" | "hd") => void;
 }) {
   const screenActive = sharing || remoteSharing;
   const localVideoEl = useRef<HTMLVideoElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Let a mobile viewer blow the partner's shared screen up to fullscreen (and
   // rotate to landscape where supported) — small inline video is unwatchable.
@@ -165,7 +168,7 @@ export function CinemaStage({
                 ? "You are sharing"
                 : remoteSharing
                   ? "Partner is sharing"
-                  : "Screen share"}
+                  : "Share a video or screen"}
           </h2>
         </div>
         <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
@@ -198,11 +201,11 @@ export function CinemaStage({
               }`}
             >
               <TwoToneIcon
-                icon={MonitorUp}
+                icon={Film}
                 tone={cinemaSource === "screen" ? "amber" : "muted"}
                 size={14}
               />
-              Screen
+              Share
             </motion.button>
           </div>
           {cinemaSource === "youtube" && !isYtController ? (
@@ -268,17 +271,44 @@ export function CinemaStage({
                 <TwoToneIcon icon={MonitorUp} tone="amber" size={24} />
               </div>
               <p className="text-sm text-white/60">
-                Share a tab or window. You will see your own preview here while
-                sharing. Best on Chrome/Edge desktop.
+                Watch together: share a video from your phone, or your screen
+                (screen share is desktop only).
               </p>
-              <motion.button
-                type="button"
-                whileTap={{ scale: 0.98 }}
-                onClick={() => void startScreenShare()}
-                className="px-5 py-3 rounded-full bg-[#FF5A79] text-sm font-semibold min-h-[44px] w-full sm:w-auto border border-[#FF5A79]/40"
-              >
-                Start sharing
-              </motion.button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="video/*"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) shareVideoFile(f);
+                  e.target.value = "";
+                }}
+              />
+              <div className="flex flex-col sm:flex-row gap-2 justify-center">
+                <motion.button
+                  type="button"
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-5 py-3 rounded-full bg-[#FF5A79] text-sm font-semibold min-h-[44px] border border-[#FF5A79]/40 inline-flex items-center justify-center gap-1.5"
+                >
+                  <TwoToneIcon icon={Film} tone="rose" size={16} />
+                  Share a video
+                </motion.button>
+                <motion.button
+                  type="button"
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => void startScreenShare()}
+                  className="px-5 py-3 rounded-full bg-white/[0.06] border border-white/12 text-sm font-medium min-h-[44px] inline-flex items-center justify-center gap-1.5 hover:bg-white/[0.1] transition-colors"
+                >
+                  <TwoToneIcon icon={MonitorUp} tone="muted" size={16} />
+                  Share screen
+                </motion.button>
+              </div>
+              <p className="text-[11px] text-white/40">
+                Videos stream at ~55–90 MB/hr (Data-saver) — far less than sending
+                the file.
+              </p>
             </div>
           ) : (
             <>
@@ -293,18 +323,29 @@ export function CinemaStage({
                     <button
                       type="button"
                       onClick={() =>
-                        setScreenQuality(screenQuality === "hd" ? "saver" : "hd")
+                        // Cycle: ultra → saver → hd → ultra
+                        setScreenQuality(
+                          screenQuality === "ultra"
+                            ? "saver"
+                            : screenQuality === "saver"
+                              ? "hd"
+                              : "ultra",
+                        )
                       }
                       className="px-3 py-2 rounded-full bg-black/70 border border-white/15 text-white text-xs font-semibold min-h-[36px] inline-flex items-center gap-1.5 hover:bg-black/85"
-                      title={
-                        screenQuality === "hd"
-                          ? "HD — sharper, ~450MB/hr. Tap for data saver."
-                          : "Data saver — ~90MB/hr. Tap for HD."
-                      }
+                      title="Data quality — tap to cycle Ultra → Saver → HD"
                     >
-                      {screenQuality === "hd" ? "HD" : "Saver"}
+                      {screenQuality === "hd"
+                        ? "HD"
+                        : screenQuality === "ultra"
+                          ? "Ultra-saver"
+                          : "Saver"}
                       <span className="text-white/50 font-normal">
-                        {screenQuality === "hd" ? "~450MB/hr" : "~90MB/hr"}
+                        {screenQuality === "hd"
+                          ? "~450MB/hr"
+                          : screenQuality === "ultra"
+                            ? "~55MB/hr"
+                            : "~90MB/hr"}
                       </span>
                     </button>
                     <motion.button

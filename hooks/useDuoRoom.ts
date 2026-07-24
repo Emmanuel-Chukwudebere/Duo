@@ -27,8 +27,13 @@ const DEFAULT_ICE: RTCConfiguration = {
   iceCandidatePoolSize: 4,
 };
 
-// Screen-share bitrate ceilings. saver ≈ ~90MB/hr on the receiver; hd ≈ ~450MB/hr.
-const SCREEN_BITRATE = { saver: 200_000, hd: 1_000_000 } as const;
+// Shared-video bitrate ceilings (receiver data ≈ rate × watch-time):
+//   ultra ≈ ~55MB/hr · saver ≈ ~90MB/hr · hd ≈ ~450MB/hr
+const SCREEN_BITRATE = {
+  ultra: 120_000,
+  saver: 200_000,
+  hd: 1_000_000,
+} as const;
 
 /** Fetch ICE servers (incl. TURN relay) from the server. Falls back to STUN-only. */
 async function fetchIceConfig(): Promise<RTCConfiguration> {
@@ -87,8 +92,9 @@ export interface DuoRoomState {
   /** True when the browser blocked audible playback of the partner's stream
    * (mobile autoplay policy) — UI shows a "Tap to hear/see partner" prompt. */
   audioBlocked: boolean;
-  /** Screen-share quality. "saver" ≈200kbps (~90MB/hr), "hd" ≈1Mbps (~450MB/hr). */
-  screenQuality: "saver" | "hd";
+  /** Shared-video quality tier:
+   *  "ultra" ≈120kbps (~55MB/hr), "saver" ≈200kbps (~90MB/hr), "hd" ≈1Mbps (~450MB/hr). */
+  screenQuality: "ultra" | "saver" | "hd";
 }
 
 export function useDuoRoom(roomCode: string) {
@@ -134,6 +140,10 @@ export function useDuoRoom(roomCode: string) {
   const channelRef = useRef<RealtimeChannel | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
+  // Hidden <video> that plays a picked local file; captureStream() feeds the
+  // screen transceivers so sharing a video reuses the screen-share pipeline.
+  const fileVideoElRef = useRef<HTMLVideoElement | null>(null);
+  const fileObjectUrlRef = useRef<string | null>(null);
   // Lazily created on the client only. `new MediaStream()` does not exist during
   // server-side render, so initializing these inline would 500 the room page on a
   // direct link/QR load (exactly how a partner joins). All consumers of these refs
@@ -420,14 +430,13 @@ export function useDuoRoom(roomCode: string) {
     const screenVideo = pc.addTransceiver("video", {
       direction: "sendrecv",
       // Default to Data-saver (~200kbps ≈ ~90MB/hr on the receiver) so mobile
-      // partners don't burn data; user can switch to HD via setScreenQuality.
+      // partners don't burn data; user can switch tiers via setScreenQuality.
       // WebRTC still adapts DOWN further on weak links.
       sendEncodings: [
         {
           maxBitrate:
-            stateRef.current.screenQuality === "hd"
-              ? SCREEN_BITRATE.hd
-              : SCREEN_BITRATE.saver,
+            SCREEN_BITRATE[stateRef.current.screenQuality] ??
+            SCREEN_BITRATE.saver,
           maxFramerate: 30,
         },
       ],
@@ -1092,6 +1101,21 @@ export function useDuoRoom(roomCode: string) {
     }
     screenStreamRef.current?.getTracks().forEach((t) => t.stop());
     screenStreamRef.current = null;
+    // Tear down a shared video file, if that's what was playing.
+    if (fileVideoElRef.current) {
+      try {
+        fileVideoElRef.current.pause();
+        fileVideoElRef.current.removeAttribute("src");
+        fileVideoElRef.current.load();
+      } catch {
+        /* ignore */
+      }
+      fileVideoElRef.current = null;
+    }
+    if (fileObjectUrlRef.current) {
+      URL.revokeObjectURL(fileObjectUrlRef.current);
+      fileObjectUrlRef.current = null;
+    }
     if (screenVideoRef.current) {
       const remoteScreen = remoteScreenStreamRef.current;
       if (remoteScreen.getVideoTracks().length > 0) {
@@ -1179,9 +1203,97 @@ export function useDuoRoom(roomCode: string) {
     update,
   ]);
 
-  // Live-adjust the screen-share sender bitrate without renegotiation.
+  // Share a picked local VIDEO FILE by capturing its playback and streaming it to
+  // the partner over the screen transceivers (Approach A: capped live stream — no
+  // server, no full-file transfer; data ≈ bitrate × watch-time). Works phone→phone.
+  const shareVideoFile = useCallback(
+    async (file: File) => {
+      try {
+        if (screenStreamRef.current) stopScreenShare();
+
+        const url = URL.createObjectURL(file);
+        fileObjectUrlRef.current = url;
+
+        const vid = document.createElement("video");
+        vid.src = url;
+        vid.playsInline = true;
+        vid.loop = false;
+        vid.muted = false;
+        fileVideoElRef.current = vid;
+
+        await new Promise<void>((resolve, reject) => {
+          vid.onloadedmetadata = () => resolve();
+          vid.onerror = () => reject(new Error("Could not read that video"));
+        });
+        await vid.play().catch(() => undefined);
+
+        // captureStream is unreliable on iOS Safari — try, and fall back cleanly.
+        type Capturable = HTMLVideoElement & {
+          captureStream?: () => MediaStream;
+          mozCaptureStream?: () => MediaStream;
+        };
+        const cap = vid as Capturable;
+        const stream = cap.captureStream
+          ? cap.captureStream()
+          : cap.mozCaptureStream
+            ? cap.mozCaptureStream()
+            : null;
+        if (!stream || stream.getVideoTracks().length === 0) {
+          throw new Error("captureStream unsupported");
+        }
+        screenStreamRef.current = stream;
+
+        update({
+          sharing: true,
+          cinemaSource: "screen",
+          mode: "cinema",
+          status: "Sharing a video — partner is watching",
+          screenPreviewKey: Date.now(),
+        });
+        sendApp({ type: "screen.start" });
+        sendApp({ type: "mode.switch", mode: "cinema" });
+        sendApp({ type: "cinema.source", source: "screen" });
+
+        bindLocalScreenPreview();
+        requestAnimationFrame(() => {
+          bindLocalScreenPreview();
+          window.setTimeout(() => bindLocalScreenPreview(), 200);
+        });
+
+        ensurePc();
+        const tx = transceiversRef.current;
+        if (tx) {
+          const sv = stream.getVideoTracks()[0];
+          const sa = stream.getAudioTracks()[0];
+          if (sv) await tx.screenVideo.sender.replaceTrack(sv).catch(() => undefined);
+          if (sa) await tx.screenAudio.sender.replaceTrack(sa).catch(() => undefined);
+        }
+        // When the file finishes, stop sharing and go back to YouTube.
+        vid.onended = () => {
+          stopScreenShare();
+          update({ cinemaSource: "youtube" });
+        };
+      } catch (e) {
+        // Clean up a half-open attempt (e.g. iOS captureStream failure).
+        if (fileObjectUrlRef.current) {
+          URL.revokeObjectURL(fileObjectUrlRef.current);
+          fileObjectUrlRef.current = null;
+        }
+        fileVideoElRef.current = null;
+        update({
+          status:
+            e instanceof Error && e.message === "captureStream unsupported"
+              ? "Sharing a video file isn't supported on this device (try Chrome desktop/Android)"
+              : "Couldn't share that video",
+        });
+      }
+    },
+    [bindLocalScreenPreview, ensurePc, sendApp, stopScreenShare, update],
+  );
+
+  // Live-adjust the shared-video sender bitrate without renegotiation.
   const setScreenQuality = useCallback(
-    (quality: "saver" | "hd") => {
+    (quality: "ultra" | "saver" | "hd") => {
       update({ screenQuality: quality });
       const sender = transceiversRef.current?.screenVideo.sender;
       if (!sender) return;
@@ -1319,6 +1431,7 @@ export function useDuoRoom(roomCode: string) {
     toggleCam,
     startScreenShare,
     stopScreenShare,
+    shareVideoFile,
     setScreenQuality,
     loadYoutube,
     takeYtControl,
