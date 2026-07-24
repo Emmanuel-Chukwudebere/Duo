@@ -76,6 +76,9 @@ export class VadDuckingEngine {
 
   async attachMic(stream: MediaStream) {
     this.detach(false);
+    // No audio track (e.g. cam-only permission) — nothing to analyze; bail
+    // cleanly instead of throwing InvalidStateError in createMediaStreamSource.
+    if (stream.getAudioTracks().length === 0) return;
     const Ctx =
       window.AudioContext ||
       (window as unknown as { webkitAudioContext: typeof AudioContext })

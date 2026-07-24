@@ -15,9 +15,11 @@ import {
   Mic,
   MicOff,
   MonitorUp,
+  MoreHorizontal,
   PartyPopper,
   QrCode,
   RotateCcw,
+  Smile,
   UtensilsCrossed,
   Volume2,
   VolumeX,
@@ -32,6 +34,7 @@ import { ToastHost, toast } from "@/components/shell/Toast";
 import { TwoToneIcon } from "@/components/ui/TwoToneIcon";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { DuoLogo } from "@/components/ui/DuoLogo";
+import { Popover, PopoverItem } from "@/components/ui/Popover";
 import { DraggableBubble } from "@/components/shell/DraggableBubble";
 
 const MODES: {
@@ -397,10 +400,10 @@ export function RoomShell({ code }: { code: string }) {
           <AnimatePresence>
             {!state.partnerPresent && !inviteDismissed ? (
               <motion.div
-                initial={{ opacity: 0, y: -10 }}
+                initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="absolute left-1/2 -translate-x-1/2 z-20 w-[min(100%-1.5rem,30rem)] top-3"
+                exit={{ opacity: 0, y: 10 }}
+                className="absolute left-1/2 -translate-x-1/2 z-20 w-[min(100%-1.5rem,30rem)] bottom-[5.5rem] sm:bottom-[6.5rem]"
               >
                 <div className="flex items-center gap-2 rounded-full border border-white/12 bg-[#181B26] pl-3 pr-1.5 py-1.5 shadow-2xl ring-1 ring-black/40">
                   <span className="relative flex h-2 w-2 shrink-0">
@@ -666,39 +669,6 @@ export function RoomShell({ code }: { code: string }) {
             </motion.button>
           </Tooltip>
 
-          <div className="w-px h-7 bg-white/10 mx-0.5 sm:mx-1 shrink-0" />
-
-          <Tooltip
-            label={
-              state.duckingMode === "auto"
-                ? "Auto-duck media when someone speaks (on)"
-                : "Auto-duck is off — use Talk to lower volume"
-            }
-          >
-            <motion.button
-              type="button"
-              whileTap={{ scale: 0.96 }}
-              onClick={() => {
-                const next = state.duckingMode === "auto" ? "off" : "auto";
-                room.setDuckingMode(next);
-                toast(
-                  next === "auto"
-                    ? "Auto ducking on"
-                    : "Auto ducking off — Talk still works",
-                );
-              }}
-              className="control-chip px-2 sm:px-3 py-1.5 text-[10px] sm:text-xs font-semibold shrink-0 min-h-[32px] inline-flex items-center gap-1"
-              data-active={state.duckingMode === "auto"}
-              aria-label="Toggle auto ducking"
-            >
-              <TwoToneIcon
-                icon={state.duckingMode === "auto" ? Volume2 : VolumeX}
-                tone={state.duckingMode === "auto" ? "rose" : "muted"}
-                size={14}
-              />
-              DUCK
-            </motion.button>
-          </Tooltip>
           <Tooltip label="Lower YouTube/media for 2 seconds so you can talk">
             <motion.button
               type="button"
@@ -721,6 +691,7 @@ export function RoomShell({ code }: { code: string }) {
 
           <div className="w-px h-7 bg-white/10 mx-0.5 sm:mx-1 shrink-0" />
 
+          {/* All four reactions inline — one tap each */}
           {REACTIONS.map((r) => (
             <Tooltip
               key={r.id}
@@ -746,6 +717,72 @@ export function RoomShell({ code }: { code: string }) {
               </motion.button>
             </Tooltip>
           ))}
+
+          <div className="w-px h-7 bg-white/10 mx-0.5 sm:mx-1 shrink-0" />
+
+          {/* Occasional settings live behind a More menu to keep the bar tidy */}
+          <Popover
+            align="right"
+            label="More options"
+            trigger={() => (
+              <span className="dock-btn w-10 h-10 sm:w-11 sm:h-11 shrink-0 inline-flex items-center justify-center">
+                <TwoToneIcon icon={MoreHorizontal} tone="muted" size={20} />
+              </span>
+            )}
+          >
+            {(close) => (
+              <div className="flex flex-col">
+                <PopoverItem
+                  icon={
+                    <TwoToneIcon
+                      icon={state.duckingMode === "auto" ? Volume2 : VolumeX}
+                      tone={state.duckingMode === "auto" ? "rose" : "muted"}
+                      size={16}
+                    />
+                  }
+                  label="Auto-duck media"
+                  hint={state.duckingMode === "auto" ? "On" : "Off"}
+                  active={state.duckingMode === "auto"}
+                  onClick={() => {
+                    const next = state.duckingMode === "auto" ? "off" : "auto";
+                    room.setDuckingMode(next);
+                    toast(
+                      next === "auto"
+                        ? "Auto ducking on"
+                        : "Auto ducking off — Talk still works",
+                    );
+                  }}
+                />
+                <PopoverItem
+                  icon={<TwoToneIcon icon={MonitorUp} tone="amber" size={16} />}
+                  label="Share quality"
+                  hint={state.screenQuality === "hd" ? "HD" : "Saver"}
+                  onClick={() =>
+                    room.setScreenQuality(
+                      state.screenQuality === "hd" ? "saver" : "hd",
+                    )
+                  }
+                />
+                <div className="my-1 h-px bg-white/10" />
+                <PopoverItem
+                  icon={<Copy size={16} />}
+                  label="Copy invite link"
+                  onClick={() => {
+                    void copyLink();
+                    close();
+                  }}
+                />
+                <PopoverItem
+                  icon={<QrCode size={16} />}
+                  label="Show QR code"
+                  onClick={() => {
+                    setShowQrModal(true);
+                    close();
+                  }}
+                />
+              </div>
+            )}
+          </Popover>
         </motion.div>
       </div>
     </div>
